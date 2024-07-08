@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { Table, TableColumnsType, TablePaginationConfig, Tooltip } from "antd";
+import {
+  Button,
+  Spin,
+  Table,
+  TableColumnsType,
+  TablePaginationConfig,
+  Tooltip,
+} from "antd";
 import { ReviewResponseModel } from "../interfaces/review-response.interface";
 import _, { set } from "lodash";
 import { requestReview } from "./review-request.service";
 import { getTimed } from "../../helpers/Cache";
-import { PaginationConfig } from "antd/es/pagination";
-
+import { DatePicker } from "antd";
+import dayjs, { Dayjs } from "dayjs";
+import "./ReviewTable.css";
+const { RangePicker } = DatePicker;
+const dateFormat = "YYYY-MM-DD";
 interface DataType {
   key: React.Key;
   productName: string;
@@ -22,6 +32,8 @@ interface DataType {
   country: string;
   homeMarketplaceId: string;
   isRequested: boolean;
+  successMessage?: string;
+  errorMessage?: string;
 }
 
 const renderProductColumn = (text: string, record: DataType) => (
@@ -37,10 +49,10 @@ const renderProductColumn = (text: string, record: DataType) => (
         <span className="truncate ...">{text}</span>
       </Tooltip>
       <span>
-        ASIN:<b>{record.asin}</b>
+        ASIN: <b>{record.asin}</b>
       </span>
       <span>
-        SKU:<b>{record.sku}</b>
+        SKU: <b>{record.sku}</b>
       </span>
       <span>
         {" "}
@@ -64,20 +76,6 @@ const renderOrderDetailsColumn = (text: string, record: DataType) => (
   </div>
 );
 
-const rowSelection = {
-  onChange: (selectedRowKeys: React.Key[], selectedRows: DataType[]) => {
-    console.log(
-      `selectedRowKeys: ${selectedRowKeys}`,
-      "selectedRows: ",
-      selectedRows
-    );
-  },
-  getCheckboxProps: (record: DataType) => ({
-    // disabled: record.name === "Disabled User", // Column configuration not to be checked
-    // name: record.name,
-  }),
-};
-
 const ReviewTable = (props: {
   amazonEndpoint: string;
   limit: number;
@@ -90,8 +88,17 @@ const ReviewTable = (props: {
     pageSize: 10,
     total: 0,
   });
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [selectedRows, setSelectedRows] = useState<DataType[]>([]);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [date, setDate] = useState<[Dayjs, Dayjs]>([
+    dayjs().subtract(6, "day").startOf("day"),
+    dayjs().subtract(6, "day").endOf("day"),
+  ]);
   useEffect(() => {
     fetchReviewDetails(pagination.pageSize, pagination.current);
+    console.log("fetching review details", date);
   }, []);
   useEffect(() => {}, [reviewData]);
 
@@ -118,31 +125,96 @@ const ReviewTable = (props: {
       title: "Order Status",
       dataIndex: "orderStatus",
       render: (text: string) => {
-        return <span>{_.startCase(text)}</span>;
+        return (
+          <span
+            className={
+              text === "PaymentComplete"
+                ? `px-4 py-2 bg-[#E3FCEE] text-[#09B253] rounded-lg`
+                : `px-4 py-2 bg-[#faefd7] text-[#f19822] rounded-lg`
+            }
+          >
+            {_.startCase(text)}
+          </span>
+        );
       },
     },
     {
       title: "Action",
       render: (_, record) => {
         return (
-          <button className="btn" onClick={() => requestCustomerReview(record)}>
-            Request Review
-          </button>
+          <div>
+            {record.isRequested ? (
+              <p className="text-green-500">Already Requested</p>
+            ) : (
+              <div>
+                <a
+                  className="text-[#094CC0]"
+                  onClick={() => requestCustomerReview(record)}
+                >
+                  Request Review
+                </a>
+                <p className="text-green-500">{record.successMessage}</p>
+                <p className="text-red-500">{record.errorMessage}</p>
+              </div>
+            )}
+          </div>
         );
       },
     },
   ];
+
+  const rowSelection = {
+    onChange: (selectedRowKeys: React.Key[], selectedRows: DataType[]) => {
+      console.log(
+        `selectedRowKeys: ${selectedRowKeys}`,
+        "selectedRows: ",
+        selectedRows
+      );
+      setSelectedRowKeys(selectedRowKeys);
+      setSelectedRows(selectedRows);
+    },
+    getCheckboxProps: (record: DataType) => ({
+      // disabled: record.name === "Disabled User", // Column configuration not to be checked
+      // name: record.name,
+    }),
+  };
   const requestCustomerReview = async (record: DataType) => {
-    await requestReview(
+    const response = await requestReview(
       props.amazonEndpoint,
       record.orderId,
       record.homeMarketplaceId
     );
+    console.log(response, "finalRespinse");
+    if (response.success) {
+      record.successMessage = _.startCase(_.lowerCase(response.success)) || "";
+    } else {
+      record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
+    }
+    setReviewData([...reviewData]);
+    return response;
   };
-  const fetchReviewDetails = async (pageSize: number, current: number) => {
+
+  const bulkReviewRequest = async () => {
+    setBulkLoading(true);
+    console.log("selectedRows", selectedRows);
+    for (const row of selectedRows) {
+      await requestCustomerReview(row);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    setSelectedRows([]);
+    setSelectedRowKeys([]);
+    setBulkLoading(false);
+  };
+
+  const fetchReviewDetails = async (
+    pageSize: number,
+    current: number,
+    dateDetails: any = date
+  ) => {
+    setReviewLoading(true);
     console.log(pagination, "pagination in fetchReviewDetails");
     const response = await axios.get<ReviewResponseModel>(
-      `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_desc&date-range=${props.timeFrame}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
+      `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_desc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
     );
     setPagination({
       current: current,
@@ -185,6 +257,7 @@ const ReviewTable = (props: {
       })
     );
     setReviewData(allOrders);
+    setReviewLoading(false);
   };
   // useEffect(() => {
   //   console.log("rendered reviewtable");
@@ -195,11 +268,6 @@ const ReviewTable = (props: {
     filters: any,
     sorter: any
   ) => {
-    // setPagination({
-    //   ...pagination,
-    //   current: paginationMutated.current,
-    //   pageSize: paginationMutated.pageSize,
-    // });
     setPagination(() => {
       return {
         ...pagination,
@@ -210,20 +278,68 @@ const ReviewTable = (props: {
     console.log(pagination, "pagination details in handleTableChange");
     fetchReviewDetails(paginationMutated.pageSize, paginationMutated.current);
   };
-
+  const dateChangeHandler = (date: any) => {
+    console.log(
+      dayjs(date[0]).startOf("days").unix(),
+      dayjs(date[1]).endOf("days").unix()
+    );
+    const dateToPass = [
+      dayjs(date[0]).startOf("days"),
+      dayjs(date[1]).endOf("days"),
+    ];
+    setDate([dateToPass[0], dateToPass[1]]);
+    fetchReviewDetails(pagination.pageSize, 1, dateToPass);
+  };
   return (
-    <div className="border-2 border-indigo-600">
-      <Table
-        rowSelection={{
-          type: "checkbox",
-          ...rowSelection,
-        }}
-        columns={columns}
-        dataSource={reviewData}
-        pagination={pagination}
-        onChange={handleTableChange}
-      />
-      {pagination.current} of {pagination.total}
+    <div className="reviewTable">
+      <div className="my-5 justify-between items-center flex">
+        <h4 className="font-medium text-xl">
+          Total Orders ({pagination.total})
+        </h4>
+        <div className="flex space-x-3">
+          <Button
+            type="primary"
+            loading={bulkLoading}
+            iconPosition={"end"}
+            onClick={bulkReviewRequest}
+            disabled={selectedRows.length === 0}
+          >
+            Bulk Request Reviews
+          </Button>
+          <RangePicker
+            minDate={dayjs().subtract(30, "day")}
+            maxDate={dayjs().subtract(6, "day")}
+            defaultValue={[date[0], date[1]]}
+            onChange={dateChangeHandler}
+          />
+        </div>
+      </div>
+
+      {reviewLoading ? (
+        <div className="flex justify-center items-center">
+          <Spin
+            tip="Loading"
+            size="large"
+            fullscreen={false}
+            className="mt-[20%]"
+          ></Spin>
+        </div>
+      ) : (
+        <div className="border-2 border-indigo-600">
+          <Table
+            rowSelection={{
+              type: "checkbox",
+
+              ...rowSelection,
+              selectedRowKeys,
+            }}
+            columns={columns}
+            dataSource={reviewData}
+            pagination={pagination}
+            onChange={handleTableChange}
+          />
+        </div>
+      )}
     </div>
   );
 };

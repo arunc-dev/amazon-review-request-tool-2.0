@@ -18,6 +18,7 @@ export const ReviewGeoDropdown = (props: {
   useEffect(() => {}, []);
   return (
     <Select
+      className="min-w-48"
       onChange={onChange}
       defaultValue={geoAsArray[0].marketplaceDisplay}
       options={geoAsArray.map((value, index) => {

@@ -18,17 +18,19 @@ export const NewTab = () => {
     console.log("rendered newtab");
   });
   return (
-    <Layout className="p-4 bg-white">
-      <header className="">
+    <Layout className="p-4 bg-white mb-10" style={{ padding: "0 48px" }}>
+      <header className="my-4">
         <div className="flex justify-between items-center">
-          <div className="flex justify-center items-center">
-            <img src="../src/assets/logo.png" alt="logo" width="50px" />
-            <span>Review Request Tool</span>
+          <div className="flex justify-center items-center space-x-3">
+            <img src="../src/assets/logo.png" alt="logo" width="30px" />
+            <span className="font-medium text-lg">
+              Amazon Review Request Tool
+            </span>
           </div>
           <ReviewGeoDropdown selectedGeo={setGeoDetailsFromProps} />
         </div>
       </header>
-      <Content style={{ padding: "0 48px" }}>
+      <Content>
         <ReviewInfoBanner />
         <ReviewTable
           amazonEndpoint={`https://${geoDetails.baseDomain}`}

@@ -23,8 +23,11 @@
     "zip": "npm run build && node src/zip.js"
   },
   "dependencies": {
+    "@wojtekmaj/react-daterange-picker": "^6.0.0",
     "antd": "^5.18.3",
     "axios": "^1.7.2",
+    "date-fns": "^3.6.0",
+    "dayjs": "^1.11.11",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
     "react": "^18.2.0",
