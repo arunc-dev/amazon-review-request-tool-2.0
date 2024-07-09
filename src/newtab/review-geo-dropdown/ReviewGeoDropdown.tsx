@@ -1,30 +1,53 @@
 import { Select } from "antd";
 import React, { useEffect } from "react";
 import { geoMaps, GeoMapsModel } from "../constants/geo-constants";
+import { CircleFlag } from "react-circle-flags";
 
 export const ReviewGeoDropdown = (props: {
   selectedGeo: (geoDetails: GeoMapsModel) => void;
 }) => {
-  useEffect(() => {
-    console.log("rendered reviewdropdownnp");
-  });
   const geoAsArray = Object.keys(geoMaps).map((key: any, index) => {
-    return { ...geoMaps[key], key };
+    return { ...geoMaps[key], key, uniqueKey: key };
   });
   const onChange = (value: any) => {
-    console.log(`selected ${value}`, geoMaps[value]);
     props.selectedGeo(geoMaps[value]);
   };
   useEffect(() => {}, []);
   return (
     <Select
-      className="min-w-48"
+      className="min-w-56"
       onChange={onChange}
-      defaultValue={geoAsArray[0].marketplaceDisplay}
+      defaultValue={geoAsArray[0].uniqueKey}
+      labelRender={(details) => {
+        const key = details.value || "AMAZON_US";
+        return (
+          <div className="flex space-x-2 justify-start items-center">
+            <CircleFlag
+              countryCode={geoMaps[key].countryCode}
+              height="10"
+              className="h-5"
+            />
+            <span>
+              Amazon {geoMaps[key].marketPlace} ({geoMaps[key].tail})
+            </span>
+          </div>
+        );
+      }}
       options={geoAsArray.map((value, index) => {
         return {
-          value: value.key,
-          label: <span>{value.marketplaceDisplay}</span>,
+          value: value.uniqueKey,
+          label: (
+            <div className="flex space-x-2 justify-start items-center">
+              <CircleFlag
+                countryCode={value.countryCode}
+                height="10"
+                className="h-5"
+              />
+              <span>
+                Amazon {value.marketPlace} ({value.tail})
+              </span>
+            </div>
+          ),
         };
       })}
     />

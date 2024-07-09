@@ -17,48 +17,69 @@ import dayjs, { Dayjs } from "dayjs";
 import "./ReviewTable.css";
 const { RangePicker } = DatePicker;
 const dateFormat = "YYYY-MM-DD";
-interface DataType {
-  key: React.Key;
+interface ProductDataType {
   productName: string;
   productImage: string;
   asin: string;
   sku: string;
   quantityOrdered: number;
+  productLink: string;
+  country: string;
+  orderItemId: string;
+}
+interface DataType {
+  key: React.Key;
   orderId: string;
-  relativeOrderData: string;
+  relativeOrderDate: string;
   salesChannel: string;
   orderType: string;
   orderStatus: string;
-  country: string;
   homeMarketplaceId: string;
   isRequested: boolean;
   successMessage?: string;
   errorMessage?: string;
+  isLoading?: boolean;
+  products: ProductDataType[];
 }
 
 const renderProductColumn = (text: string, record: DataType) => (
-  <div className="row flex space-x-2 justify-center items-center">
-    <img
-      src={record.productImage}
-      alt={record.productName}
-      width="70px"
-      className="object-contain	"
-    />
-    <div className="flex-col flex w-[calc(100%-92px)] space-y-1">
-      <Tooltip placement="topLeft" title={text}>
-        <span className="truncate ...">{text}</span>
-      </Tooltip>
-      <span>
-        ASIN: <b>{record.asin}</b>
-      </span>
-      <span>
-        SKU: <b>{record.sku}</b>
-      </span>
-      <span>
-        {" "}
-        Quantity Ordered: <b>{record.quantityOrdered}</b>
-      </span>
-    </div>
+  <div className="">
+    {record.products.map((item, index) => (
+      <div
+        key={item.orderItemId}
+        className="row flex space-x-2 justify-center items-center pt-1 pb-1"
+        style={{
+          borderBottom:
+            index !== record.products.length - 1
+              ? "1px solid #e2e2e278"
+              : "none",
+        }}
+      >
+        <img
+          src={item.productImage}
+          alt={item.productName}
+          width="70px"
+          className="object-contain	"
+        />
+        <div className="flex-col flex w-[calc(100%-92px)] space-y-1">
+          <Tooltip placement="topLeft" title={text}>
+            <a className="truncate ..." href={item.productLink} target="_blank">
+              {text}
+            </a>
+          </Tooltip>
+          <span>
+            ASIN: <b>{item.asin}</b>
+          </span>
+          <span>
+            SKU: <b>{item.sku}</b>
+          </span>
+          <span>
+            {" "}
+            Quantity Ordered: <b>{item.quantityOrdered}</b>
+          </span>
+        </div>
+      </div>
+    ))}
   </div>
 );
 
@@ -68,24 +89,24 @@ const renderOrderDetailsColumn = (text: string, record: DataType) => (
       Order ID: <b>{record.orderId}</b>
     </span>
     <span>
-      Order Date: <b>{record.relativeOrderData}</b>
+      Order Date: <b>{record.relativeOrderDate}</b>
     </span>
     <span>
-      Marketplace: <b>Amazon {record.country}</b>
+      Marketplace: <b>Amazon {record.products[0].country}</b>
     </span>
   </div>
 );
 
 const ReviewTable = (props: {
   amazonEndpoint: string;
-  limit: number;
-  timeFrame: string;
+  isSignedIn: (isSignedIn: boolean) => void;
+  refreshPage: boolean;
 }) => {
   const [page, setPage] = useState(0);
   const [reviewData, setReviewData] = useState<DataType[]>([]);
   const [pagination, setPagination] = useState<any>({
     current: 1,
-    pageSize: 10,
+    pageSize: 50,
     total: 0,
   });
   const [reviewLoading, setReviewLoading] = useState(true);
@@ -98,8 +119,7 @@ const ReviewTable = (props: {
   ]);
   useEffect(() => {
     fetchReviewDetails(pagination.pageSize, pagination.current);
-    console.log("fetching review details", date);
-  }, []);
+  }, [props.amazonEndpoint, props.refreshPage]);
   useEffect(() => {}, [reviewData]);
 
   const columns: TableColumnsType<DataType> = [
@@ -142,17 +162,20 @@ const ReviewTable = (props: {
       title: "Action",
       render: (_, record) => {
         return (
-          <div>
+          <div key={record.key}>
             {record.isRequested ? (
               <p className="text-green-500">Already Requested</p>
             ) : (
               <div>
-                <a
-                  className="text-[#094CC0]"
+                <Button
+                  type="link"
+                  loading={record.isLoading}
+                  iconPosition={"end"}
+                  className="text-[#094CC0] pl-0"
                   onClick={() => requestCustomerReview(record)}
                 >
                   Request Review
-                </a>
+                </Button>
                 <p className="text-green-500">{record.successMessage}</p>
                 <p className="text-red-500">{record.errorMessage}</p>
               </div>
@@ -165,11 +188,6 @@ const ReviewTable = (props: {
 
   const rowSelection = {
     onChange: (selectedRowKeys: React.Key[], selectedRows: DataType[]) => {
-      console.log(
-        `selectedRowKeys: ${selectedRowKeys}`,
-        "selectedRows: ",
-        selectedRows
-      );
       setSelectedRowKeys(selectedRowKeys);
       setSelectedRows(selectedRows);
     },
@@ -179,27 +197,29 @@ const ReviewTable = (props: {
     }),
   };
   const requestCustomerReview = async (record: DataType) => {
+    record.isLoading = true;
+    setReviewData([...reviewData]);
     const response = await requestReview(
       props.amazonEndpoint,
       record.orderId,
       record.homeMarketplaceId
     );
-    console.log(response, "finalRespinse");
     if (response.success) {
       record.successMessage = _.startCase(_.lowerCase(response.success)) || "";
     } else {
       record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
     }
+    record.isLoading = false;
     setReviewData([...reviewData]);
     return response;
   };
 
   const bulkReviewRequest = async () => {
     setBulkLoading(true);
-    console.log("selectedRows", selectedRows);
     for (const row of selectedRows) {
+      if (row.isRequested) continue;
       await requestCustomerReview(row);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
     setSelectedRows([]);
     setSelectedRowKeys([]);
@@ -212,57 +232,103 @@ const ReviewTable = (props: {
     dateDetails: any = date
   ) => {
     setReviewLoading(true);
-    console.log(pagination, "pagination in fetchReviewDetails");
-    const response = await axios.get<ReviewResponseModel>(
-      `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_desc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
-    );
-    setPagination({
-      current: current,
-      pageSize: pageSize,
-      total: response.data.total,
-    });
-    transformOrderData(response.data);
+    try {
+      const response = await axios.get<ReviewResponseModel>(
+        `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_desc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
+      );
+      if (typeof response.data === "string") {
+        props.isSignedIn(false);
+        return;
+      } else {
+        setPagination({
+          current: current,
+          pageSize: pageSize,
+          total: response.data.total,
+        });
+        transformOrderData(response.data);
+      }
+    } catch (error) {
+      props.isSignedIn(false);
+    }
   };
+  // const transformOrderData = async (data: ReviewResponseModel) => {
+  //   let allOrders: DataType[] = [];
+  //   await Promise.all(
+  //     data.orders.map(async (order) => {
+  //       const orderItems = await Promise.all(
+  //         order.orderItems.map(async (item) => {
+  //           try {
+  //             await getTimed(item.orderItemId);
+  //             item.isRequested = true;
+  //           } catch (error) {
+  //             item.isRequested = false;
+  //           }
+  //           return {
+  //             key: item.orderItemId,
+  //             productName: item.productName,
+  //             productImage: item.imageUrl,
+  //             asin: item.asin,
+  //             sku: item.sellerSku,
+  //             quantityOrdered: item.quantityOrdered,
+  //             orderId: order.amazonOrderId,
+  //             relativeOrderDate: order.relativeOrderDate,
+  //             salesChannel: order.salesChannel,
+  //             orderType: order.shippingService,
+  //             orderStatus: order.orderFulfillmentStatus,
+  //             country: item.billingCountry,
+  //             homeMarketplaceId: order.homeMarketplaceId,
+  //             isRequested: item.isRequested,
+  //             productLink: item.productLink,
+  //           };
+  //         })
+  //       );
+  //       console.log(orderItems);
+  //       allOrders.push(...orderItems);
+  //     })
+  //   );
+  //   setReviewData(allOrders);
+  //   setReviewLoading(false);
+  // };
   const transformOrderData = async (data: ReviewResponseModel) => {
     let allOrders: DataType[] = [];
-    await Promise.all(
+    const orderItems = await Promise.all(
       data.orders.map(async (order) => {
-        const orderItems = await Promise.all(
-          order.orderItems.map(async (item) => {
-            try {
-              await getTimed(item.orderItemId);
-              item.isRequested = true;
-            } catch (error) {
-              item.isRequested = false;
-            }
+        try {
+          await getTimed(order.amazonOrderId);
+          order.isRequested = true;
+        } catch (error) {
+          order.isRequested = false;
+        }
+        return {
+          key: order.amazonOrderId,
+          orderId: order.amazonOrderId,
+          relativeOrderDate: order.relativeOrderDate,
+          salesChannel: order.salesChannel,
+          orderType: order.shippingService,
+          orderStatus: order.orderFulfillmentStatus,
+          homeMarketplaceId: order.homeMarketplaceId,
+          isRequested: order.isRequested,
+
+          products: order.orderItems.map((item) => {
             return {
-              key: item.orderItemId,
               productName: item.productName,
               productImage: item.imageUrl,
               asin: item.asin,
               sku: item.sellerSku,
               quantityOrdered: item.quantityOrdered,
-              orderId: order.amazonOrderId,
-              relativeOrderData: order.relativeOrderDate,
-              salesChannel: order.salesChannel,
-              orderType: order.shippingService,
-              orderStatus: order.orderFulfillmentStatus,
+              productLink: item.productLink,
               country: item.billingCountry,
-              homeMarketplaceId: order.homeMarketplaceId,
-              isRequested: item.isRequested,
+              orderItemId: item.orderItemId,
             };
-          })
-        );
-        allOrders.push(...orderItems);
+          }),
+        };
       })
     );
+    console.log(orderItems);
+    allOrders.push(...orderItems);
     setReviewData(allOrders);
     setReviewLoading(false);
   };
-  // useEffect(() => {
-  //   console.log("rendered reviewtable");
-  // });
-
   const handleTableChange = (
     paginationMutated: any,
     filters: any,
@@ -275,14 +341,9 @@ const ReviewTable = (props: {
         pageSize: paginationMutated.pageSize,
       };
     });
-    console.log(pagination, "pagination details in handleTableChange");
     fetchReviewDetails(paginationMutated.pageSize, paginationMutated.current);
   };
   const dateChangeHandler = (date: any) => {
-    console.log(
-      dayjs(date[0]).startOf("days").unix(),
-      dayjs(date[1]).endOf("days").unix()
-    );
     const dateToPass = [
       dayjs(date[0]).startOf("days"),
       dayjs(date[1]).endOf("days"),
@@ -292,7 +353,12 @@ const ReviewTable = (props: {
   };
   return (
     <div className="reviewTable">
-      <div className="my-5 justify-between items-center flex">
+      <div
+        className={`my-5 justify-between items-center flex ${
+          reviewLoading ? "hidden" : "block"
+        }
+        `}
+      >
         <h4 className="font-medium text-xl">
           Total Orders ({pagination.total})
         </h4>
@@ -325,7 +391,7 @@ const ReviewTable = (props: {
           ></Spin>
         </div>
       ) : (
-        <div className="border-2 border-indigo-600">
+        <div>
           <Table
             rowSelection={{
               type: "checkbox",

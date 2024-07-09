@@ -12,7 +12,6 @@ export const requestReview = async (
       `${baseDomain}/messaging/api/solicitations/${amazonOrderId}/productReviewAndSellerFeedback?marketplaceId=${homeMarketplaceId}&buyerId=&customerType=&isReturn=false&documentReferrer=https%3A%2F%2Fsellercentral.amazon.com%2Forders-v3%2Forder%2F${amazonOrderId}`
     );
     const csrfToken = reviewCheckResponse.headers["anti-csrftoken-a2z"];
-    console.log(csrfToken, "csrfToken", reviewCheckResponse);
     if (!reviewCheckResponse.data.isSuccess) {
       if (
         reviewCheckResponse.data.ineligibleReason !==
@@ -45,15 +44,16 @@ export const requestReview = async (
           }
         );
         if (!requestReviewResponse.data.isSuccess) {
-          resolve({ error: requestReviewResponse.data.ineligibleReason });
+          resolve({
+            error: requestReviewResponse.data?.ineligibleReason || "",
+          });
         } else {
           resolve({ success: "Successfully Requested " });
           setTimed(amazonOrderId, "true", moment().add(30, "days").format());
         }
       } catch (error: any) {
-        console.log(error.response.data, "error");
-        error.response.data;
-        resolve({ error: error.response.data.errorType });
+        error.response?.data;
+        resolve({ error: error.response.data?.errorType || "" });
       }
     }
   });

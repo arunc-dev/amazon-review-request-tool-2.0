@@ -1,9 +1,10 @@
 {
   "name": "amazon-review-request-tool-2.0",
   "displayName": "Amazon Review Request Tool",
-  "version": "0.0.0",
+  "description": "Use SellerApp’s free Amazon Review Request Tool to generate hassle-free review requests in one go",
+  "short_name": "SellerApp's Amazon reviewer",
+  "version": "2.0.1",
   "author": "",
-  "description": "",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -23,14 +24,13 @@
     "zip": "npm run build && node src/zip.js"
   },
   "dependencies": {
-    "@wojtekmaj/react-daterange-picker": "^6.0.0",
     "antd": "^5.18.3",
     "axios": "^1.7.2",
-    "date-fns": "^3.6.0",
     "dayjs": "^1.11.11",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
     "react": "^18.2.0",
+    "react-circle-flags": "^0.0.20",
     "react-dom": "^18.2.0",
     "vite-plugin-html": "^3.2.2"
   },

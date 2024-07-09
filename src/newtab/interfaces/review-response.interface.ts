@@ -64,6 +64,7 @@ export interface Order {
   shippingServiceOption: any;
   shippingServiceStringId: string;
   timeZoneDetailsMap: TimeZoneDetailsMap;
+  isRequested: boolean;
 }
 
 export interface ComplexActions {}
@@ -106,7 +107,6 @@ export interface OrderItem {
   transparencyItem: boolean;
   transparencyItemAttribute: any;
   unitPrice: UnitPrice;
-  isRequested: boolean;
 }
 
 export interface UnitPrice {
