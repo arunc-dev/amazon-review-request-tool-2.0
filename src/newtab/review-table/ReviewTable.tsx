@@ -9,13 +9,16 @@ import {
   Tooltip,
 } from "antd";
 import { ReviewResponseModel } from "../interfaces/review-response.interface";
-import _, { set } from "lodash";
+import _ from "lodash";
 import { requestReview } from "./review-request.service";
-import { getTimed } from "../../helpers/Cache";
+import { get, getTimed, set } from "../../helpers/Cache";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import "./ReviewTable.css";
+import { v4 as uuidv4 } from "uuid";
 const { RangePicker } = DatePicker;
+const webhookUrl =
+  "https://hooks.slack.com/services/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";
 const dateFormat = "YYYY-MM-DD";
 interface ProductDataType {
   productName: string;
@@ -172,7 +175,7 @@ const ReviewTable = (props: {
                   loading={record.isLoading}
                   iconPosition={"end"}
                   className="text-[#094CC0] pl-0"
-                  onClick={() => requestCustomerReview(record)}
+                  onClick={() => requestCustomerReview(record, "single")}
                 >
                   Request Review
                 </Button>
@@ -196,7 +199,10 @@ const ReviewTable = (props: {
       // name: record.name,
     }),
   };
-  const requestCustomerReview = async (record: DataType) => {
+  const requestCustomerReview = async (
+    record: DataType,
+    type: "single" | "bulk"
+  ) => {
     record.isLoading = true;
     setReviewData([...reviewData]);
     const response = await requestReview(
@@ -210,17 +216,55 @@ const ReviewTable = (props: {
       record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
     }
     record.isLoading = false;
+    if (type === "single") {
+      sendWebHook([record]);
+    }
     setReviewData([...reviewData]);
-    return response;
+    return record;
+  };
+
+  const sendWebHook = async (records: DataType[]) => {
+    let uuid = "";
+    let callCount = 0;
+    const date = new Date();
+    try {
+      uuid = (await get("uuid")) as string;
+    } catch (error) {
+      uuid = uuidv4();
+      set("uuid", uuid);
+    }
+    let text = `uuid: ${uuid}\ndate: ${date.toString()}`;
+    for (const record of records) {
+      try {
+        callCount = (await get("callCount")) as number;
+        callCount++;
+        set("callCount", callCount);
+      } catch (error) {
+        callCount = 1;
+        set("callCount", callCount);
+      }
+      const status = record.successMessage ? "success" : "failed";
+      const message = record.errorMessage || record.successMessage;
+      text =
+        text +
+        `\nstatus: ${status}\nmessage: ${message}\ncallCount: ${callCount}`;
+    }
+
+    axios.post(webhookUrl, {
+      text,
+    });
   };
 
   const bulkReviewRequest = async () => {
     setBulkLoading(true);
+    const recordsAfterCall = [];
     for (const row of selectedRows) {
       if (row.isRequested) continue;
-      await requestCustomerReview(row);
+      const record = await requestCustomerReview(row, "bulk");
+      recordsAfterCall.push(record);
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
+    sendWebHook(recordsAfterCall);
     setSelectedRows([]);
     setSelectedRowKeys([]);
     setBulkLoading(false);
