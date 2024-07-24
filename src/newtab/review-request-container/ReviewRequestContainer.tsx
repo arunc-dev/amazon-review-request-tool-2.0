@@ -168,7 +168,10 @@ export default function ReviewRequestContainer(props: Props) {
                 <Button
                   type="primary"
                   onClick={() =>
-                    window.open("https://dashboard.sellerapp.com/login")
+                    window.open(
+                      "https://dashboard.sellerapp.com/login?source=extension",
+                      "_self"
+                    )
                   }
                 >
                   Login

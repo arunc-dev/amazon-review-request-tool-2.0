@@ -420,8 +420,9 @@ const ReviewTable = (props: {
         }
       } else {
         try {
-          const currentUsage = (await get("quota")) as any;
-          const usage = currentUsage.usage || 0;
+          const currentUsage = await getQuota();
+          console.log(currentUsage, "currentUsage");
+          const usage = currentUsage.usage + successRecords.length;
           await setTimed(
             "quota",
             JSON.stringify({
@@ -439,7 +440,7 @@ const ReviewTable = (props: {
               frequency: "",
               limit: 5,
               next_reset: "",
-              usage: successRecords.length,
+              usage: successRecords.length || 0,
             }),
             moment().endOf("month")
           );
