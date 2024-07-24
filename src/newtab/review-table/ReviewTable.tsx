@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import {
   Button,
@@ -11,14 +11,20 @@ import {
 import { ReviewResponseModel } from "../interfaces/review-response.interface";
 import _ from "lodash";
 import { requestReview } from "./review-request.service";
-import { get, getTimed, set } from "../../helpers/Cache";
+import { get, getTimed, set, setTimed } from "../../helpers/Cache";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import "./ReviewTable.css";
 import { v4 as uuidv4 } from "uuid";
+import { UserContext } from "../UserContext";
+import { getAuthentication } from "../../Auth";
+import { updateQuota } from "../axios_base";
+import moment from "moment";
+import { getQuota } from "../helpers";
+import { PaginationConfig } from "antd/es/pagination";
 const { RangePicker } = DatePicker;
 const webhookUrl =
-  "https://hooks.slack.com/services/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";
+  "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription";
 const dateFormat = "YYYY-MM-DD";
 interface ProductDataType {
   productName: string;
@@ -104,26 +110,93 @@ const ReviewTable = (props: {
   amazonEndpoint: string;
   isSignedIn: (isSignedIn: boolean) => void;
   refreshPage: boolean;
+  isQuotaExhausted: (value: boolean) => void;
 }) => {
   const [page, setPage] = useState(0);
   const [reviewData, setReviewData] = useState<DataType[]>([]);
   const [pagination, setPagination] = useState<any>({
     current: 1,
-    pageSize: 50,
+    pageSize: 10,
     total: 0,
   });
+  const userContext = useContext(UserContext);
+  if (!userContext) {
+    throw new Error("MyComponent must be used within a MyProvider");
+  }
+  const { userDetails, setUserDetails } = userContext;
   const [reviewLoading, setReviewLoading] = useState(true);
   const [selectedRows, setSelectedRows] = useState<DataType[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [pageContext, setPageContext] = useState(null);
   const [date, setDate] = useState<[Dayjs, Dayjs]>([
     dayjs().subtract(6, "day").startOf("day"),
     dayjs().subtract(6, "day").endOf("day"),
   ]);
+
+  // useEffect(() => {
+  //   if (userContext.userDetails.quota.limit <= 10) {
+  //     setPagination({
+  //       current: 1,
+  //       pageSize: 10,
+  //       total: 0,
+  //     });
+  //   }
+  // }, []);
   useEffect(() => {
-    fetchReviewDetails(pagination.pageSize, pagination.current);
+    (async () => {
+      let pageSizeCached: number = 10;
+      try {
+        pageSizeCached = (await get("pageSize")) as number;
+      } catch {
+        pageSizeCached = 10;
+      }
+      const quota = await getQuota();
+      const isFreeUser = quota.limit <= 10;
+      const pageSize = isFreeUser ? 20 : pageSizeCached ? pageSizeCached : 50;
+
+      const paginationParams = {
+        ...JSON.parse(JSON.stringify(pagination)),
+        pageSize,
+      };
+      console.log(isFreeUser, "isFreeUser", paginationParams);
+      setPagination({ ...pagination, pageSize });
+      fetchReviewDetails(pageSize, pagination.current);
+    })();
   }, [props.amazonEndpoint, props.refreshPage]);
-  useEffect(() => {}, [reviewData]);
+  useEffect(() => {}, [reviewData, pagination]);
+  useEffect(() => {
+    const auth = getAuthentication();
+    auth.onAuthStateChanged(async (user) => {
+      console.log(user);
+      if (user) {
+        const quota = await getQuota();
+        setUserDetails({
+          ...userDetails,
+          user,
+          quota,
+        });
+        console.log(user, "User is signed in");
+      } else {
+        const quota = await getQuota();
+        console.log(quota, "quotafsfsfiufbiu");
+        setUserDetails({
+          ...userDetails,
+          user,
+          quota,
+        });
+        console.log("User is signed out");
+      }
+      console.log(userDetails);
+    });
+    axios
+      .post(
+        "https://sellercentral.amazon.com/api/brand-analytics/v1/dashboards"
+      )
+      .then((response) => {
+        setPageContext(response?.data?.pageContext);
+      });
+  }, []);
 
   const columns: TableColumnsType<DataType> = [
     {
@@ -203,27 +276,34 @@ const ReviewTable = (props: {
     record: DataType,
     type: "single" | "bulk"
   ) => {
-    record.isLoading = true;
-    setReviewData([...reviewData]);
-    const response = await requestReview(
-      props.amazonEndpoint,
-      record.orderId,
-      record.homeMarketplaceId
-    );
-    if (response.success) {
-      record.successMessage = _.startCase(_.lowerCase(response.success)) || "";
+    if (userDetails.quota.usage >= userDetails.quota.limit) {
+      props.isQuotaExhausted(true);
+      return record;
     } else {
-      record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
+      record.isLoading = true;
+      setReviewData([...reviewData]);
+      const response = await requestReview(
+        props.amazonEndpoint,
+        record.orderId,
+        record.homeMarketplaceId
+      );
+      if (response.success) {
+        record.successMessage =
+          _.startCase(_.lowerCase(response.success)) || "";
+      } else {
+        record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
+      }
+      record.isLoading = false;
+      if (type === "single") {
+        sendWebHook([record], type);
+        checkAndUpdateQuota([record]);
+      }
+      setReviewData([...reviewData]);
+      return record;
     }
-    record.isLoading = false;
-    if (type === "single") {
-      sendWebHook([record]);
-    }
-    setReviewData([...reviewData]);
-    return record;
   };
 
-  const sendWebHook = async (records: DataType[]) => {
+  const sendWebHook = async (records: DataType[], type: "single" | "bulk") => {
     let uuid = "";
     let callCount = 0;
     const date = new Date();
@@ -234,6 +314,23 @@ const ReviewTable = (props: {
       set("uuid", uuid);
     }
     let text = `uuid: ${uuid}\ndate: ${date.toString()}`;
+    let data: {
+      uuid: string;
+      date: string;
+      records: any[];
+      type: string;
+      customerId: string;
+      marketplace: string;
+      merchantId: string;
+    } = {
+      uuid: uuid,
+      date: date.toString(),
+      records: [],
+      type,
+      customerId: (pageContext as any)?.obfuscatedCustomerId,
+      merchantId: (pageContext as any)?.obfuscatedMerchantCustomerId,
+      marketplace: props.amazonEndpoint,
+    };
     for (const record of records) {
       try {
         callCount = (await get("callCount")) as number;
@@ -248,26 +345,107 @@ const ReviewTable = (props: {
       text =
         text +
         `\nstatus: ${status}\nmessage: ${message}\ncallCount: ${callCount}`;
+      data.records.push({
+        status,
+        message,
+        callCount,
+      });
     }
 
     axios.post(webhookUrl, {
-      text,
+      data,
     });
   };
 
   const bulkReviewRequest = async () => {
-    setBulkLoading(true);
-    const recordsAfterCall = [];
-    for (const row of selectedRows) {
-      if (row.isRequested) continue;
-      const record = await requestCustomerReview(row, "bulk");
-      recordsAfterCall.push(record);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    console.log(userDetails.quota);
+    if (
+      userDetails.quota.usage >= userDetails.quota.limit ||
+      selectedRows.length > userDetails.quota.limit - userDetails.quota.usage
+    ) {
+      props.isQuotaExhausted(true);
+      return;
+    } else {
+      setBulkLoading(true);
+      const recordsAfterCall: DataType[] = [];
+
+      for (const row of selectedRows) {
+        if (row.isRequested) continue;
+        const record = await requestCustomerReview(row, "bulk");
+        recordsAfterCall.push(record);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      if (recordsAfterCall.length > 0 && recordsAfterCall) {
+        sendWebHook(recordsAfterCall, "bulk");
+      }
+
+      setSelectedRows([]);
+      setSelectedRowKeys([]);
+      setBulkLoading(false);
+      checkAndUpdateQuota(recordsAfterCall);
     }
-    sendWebHook(recordsAfterCall);
-    setSelectedRows([]);
-    setSelectedRowKeys([]);
-    setBulkLoading(false);
+  };
+
+  const checkAndUpdateQuota = async (records: DataType[]) => {
+    const successRecords = records.filter((record) => record.errorMessage);
+    console.log(successRecords);
+    if (successRecords.length > 0) {
+      let usage = 0;
+      console.log(userDetails.quota?.usage, "fasfafasfasfs");
+      usage = userDetails.quota?.usage + successRecords.length;
+      setUserDetails({
+        ...userDetails,
+        quota: {
+          ...userDetails.quota,
+          usage,
+        },
+      });
+      const user = await getAuthentication().currentUser;
+      if (user) {
+        console.log(user);
+        try {
+          await updateQuota(successRecords.length);
+        } catch (error) {
+          console.log(error);
+          await setTimed(
+            "quota",
+            JSON.stringify({
+              frequency: "",
+              limit: 5,
+              next_reset: "",
+              usage: usage,
+            }),
+            moment().endOf("month")
+          );
+        }
+      } else {
+        try {
+          const currentUsage = (await get("quota")) as any;
+          const usage = currentUsage.usage || 0;
+          await setTimed(
+            "quota",
+            JSON.stringify({
+              frequency: "",
+              limit: 5,
+              next_reset: "",
+              usage: usage,
+            }),
+            moment().endOf("month")
+          );
+        } catch (error) {
+          setTimed(
+            "quota",
+            JSON.stringify({
+              frequency: "",
+              limit: 5,
+              next_reset: "",
+              usage: successRecords.length,
+            }),
+            moment().endOf("month")
+          );
+        }
+      }
+    }
   };
 
   const fetchReviewDetails = async (
@@ -285,6 +463,7 @@ const ReviewTable = (props: {
         return;
       } else {
         setPagination({
+          ...pagination,
           current: current,
           pageSize: pageSize,
           total: response.data.total,
@@ -368,7 +547,6 @@ const ReviewTable = (props: {
         };
       })
     );
-    console.log(orderItems);
     allOrders.push(...orderItems);
     setReviewData(allOrders);
     setReviewLoading(false);
@@ -378,6 +556,7 @@ const ReviewTable = (props: {
     filters: any,
     sorter: any
   ) => {
+    set("pageSize", paginationMutated.pageSize);
     setPagination(() => {
       return {
         ...pagination,
@@ -416,12 +595,22 @@ const ReviewTable = (props: {
           >
             Bulk Request Reviews
           </Button>
-          <RangePicker
-            minDate={dayjs().subtract(30, "day")}
-            maxDate={dayjs().subtract(6, "day")}
-            defaultValue={[date[0], date[1]]}
-            onChange={dateChangeHandler}
-          />
+          <Tooltip
+            title={
+              userContext.userDetails.quota.limit > 10
+                ? "Select Date Range"
+                : "Subscribe to use this feature"
+            }
+          >
+            <RangePicker
+              minDate={dayjs().subtract(30, "day")}
+              maxDate={dayjs().subtract(6, "day")}
+              defaultValue={[date[0], date[1]]}
+              onChange={dateChangeHandler}
+              disabled={userContext.userDetails.quota.limit <= 10}
+              title="Select Date Range"
+            />
+          </Tooltip>
         </div>
       </div>
 
@@ -445,7 +634,10 @@ const ReviewTable = (props: {
             }}
             columns={columns}
             dataSource={reviewData}
-            pagination={pagination}
+            pagination={{
+              ...pagination,
+              disabled: userDetails.quota.limit <= 10,
+            }}
             onChange={handleTableChange}
           />
         </div>

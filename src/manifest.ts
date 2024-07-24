@@ -26,12 +26,12 @@ export default defineManifest({
     service_worker: "src/background/index.ts",
     type: "module",
   },
-  // content_scripts: [
-  //   {
-  //     matches: ["http://*/*", "https://*/*"],
-  //     js: ["src/contentScript/index.ts"],
-  //   },
-  // ],
+  content_scripts: [
+    {
+      matches: ["http://*/*", "https://*/*"],
+      js: ["src/contentScript/index.ts"],
+    },
+  ],
   // side_panel: {
   //   default_path: "sidepanel.html",
   // },
@@ -43,14 +43,23 @@ export default defineManifest({
         "img/logo-48.png",
         "img/logo-128.png",
       ],
-      matches: [],
+      matches: ["https://*.sellerapp.com/*"],
     },
   ],
-  permissions: ["storage"],
+  permissions: ["storage", "cookies", "identity"],
   host_permissions: [
     "https://*/sellercentral.amazon.*/",
     "https://*/amazon.*/",
+    "https://apis.google.com/",
   ],
+  oauth2: {
+    client_id:
+      "207791529245-bfa7h3t856ffe220po6qacm69g6nlcn6.apps.googleusercontent.com",
+    scopes: [
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/userinfo.email",
+    ],
+  },
 
   key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk/qx6Yqigt2LZin29U8uEo4vAWu/mdl6wLRBeQ1KsZRX4/WbOVfwhzxdfIxqxcyIbmqUdWE98Zi6mMGG61YyomJzkZF1Xu0XAuEYC/9dvd8L5Yu6HZnXCh4O7S5ZzCvihjiAEGk3BSL148szoD/JwJlvceUE6cHVe4WcmhkyeB8hFNf0nPkQcuEqzT5yDkQ14zdwOEU82GJHRj20WlN72u1Mv/oauJCz7diC3FX6PORT0vrAFoTdWcmkstvNFg6VQgdY8CFO3owLSGKYHv2q3kAYjgxFz5rsidaZRQGkdwruUuawyovm59y2GbYYxfcEVu3JpFJGMl+zvNGgBUOoUQIDAQAB",
   // chrome_url_overrides: {

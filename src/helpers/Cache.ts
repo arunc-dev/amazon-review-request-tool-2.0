@@ -51,7 +51,7 @@ export const getTimed = (key: string) => {
 /* Set values cached with expiration time.
    value saved as { expiration: 'datetime', value: value }
 */
-export const setTimed = (key: string, value: string, expiration: string) => {
+export const setTimed = (key: string, value: string, expiration: any) => {
   return new Promise((resolve, reject) => {
     const toSave = {
       [key]: {
@@ -59,6 +59,7 @@ export const setTimed = (key: string, value: string, expiration: string) => {
         expiration: moment(expiration).format(),
       },
     };
+    // console.log(toSave, "toSave");
     chrome.storage.local.set(toSave, () => {
       resolve({ status: "saved" });
     });
