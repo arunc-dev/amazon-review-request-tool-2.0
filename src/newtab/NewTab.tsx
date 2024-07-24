@@ -17,13 +17,11 @@ export const NewTab = () => {
   useEffect(() => {
     // navigate("/signIn");
     const query = queryString.parse(location.search);
-    console.log(query, "query");
     if (query.isPaymentSuccess) {
       const auth = getAuthentication();
       auth.currentUser
         ?.getIdToken(true)
         .then((token) => {
-          console.log(token, "token");
           setIsLoading(false);
         })
         .catch((error) => {
@@ -45,7 +43,6 @@ export const NewTab = () => {
   }, []);
 
   const handleQuotaExhaust = () => {
-    console.log("Quota Exhausted");
     //to reopen the modal. This is a hack to reopen the modal
     setPopupState(false);
     setTimeout(() => {

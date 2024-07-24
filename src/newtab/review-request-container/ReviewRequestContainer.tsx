@@ -54,9 +54,7 @@ export default function ReviewRequestContainer(props: Props) {
     const auth = getAuthentication();
     auth.signOut();
   };
-  useEffect(() => {
-    console.log(userDetails, "userDetails");
-  }, [userContext]);
+  useEffect(() => {}, [userContext]);
   useEffect(() => {
     setSignInStateLoading(true);
     const auth = getAuthentication();
@@ -64,7 +62,6 @@ export default function ReviewRequestContainer(props: Props) {
       { url: "https://sellerapp.com", name: "__session" },
       async (sessionCookie) => {
         if (sessionCookie) {
-          console.log(sessionCookie.value);
           const functionInstance = getFunctions();
           var validateSessionCookie = httpsCallable(
             functionInstance,
@@ -80,20 +77,16 @@ export default function ReviewRequestContainer(props: Props) {
               const customToken = result.data.customToken;
               const userCred = await signInWithCustomTokenHandler(customToken);
               const user = userCred.user;
-              console.log(user);
               const quota = await getQuota();
-              console.log(quota, "quotafafasf");
               setUserDetails({
                 ...userDetails,
                 user,
                 quota,
               });
               const token = await userCred.user.getIdToken();
-              console.log(token, "token");
               setSignInStateLoading(false);
             } catch (error) {
               const quota = await getQuota();
-              console.log(quota, "quotafafasf");
               setUserDetails({
                 ...userDetails,
                 user: null,
@@ -104,7 +97,6 @@ export default function ReviewRequestContainer(props: Props) {
           });
         } else {
           const quota = await getQuota();
-          console.log(quota, "quotafafasf");
           setUserDetails({
             ...userDetails,
             user: null,

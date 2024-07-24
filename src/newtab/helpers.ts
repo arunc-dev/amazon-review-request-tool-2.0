@@ -10,10 +10,8 @@ export interface QuotaModel {
 const getTimedQuota = async (): Promise<QuotaModel> => {
   try {
     const quota = (await getTimed("quota")) as any;
-    console.log(quota, "quotaFromgssdgsdgsdg");
     return JSON.parse(quota) as QuotaModel;
   } catch (error) {
-    console.log(error, "rfwefwjkebfk");
     return {
       frequency: "",
       limit: 5,
@@ -42,13 +40,11 @@ export const getQuota = async (): Promise<QuotaModel> => {
   return new Promise(async (resolve, reject) => {
     let unsubscribe: any;
     unsubscribe = await getAuthentication().onAuthStateChanged(async (user) => {
-      console.log(user, "userFromQuota");
       if (user) {
         try {
           const quotaDetails = await fetchQuota();
           resolve(quotaDetails.data.data.global_quota.ext.addition);
         } catch (error) {
-          console.log(error, "afkjabfkjbkfjabskjf");
           resolve(await getTimedQuota());
         }
       } else {

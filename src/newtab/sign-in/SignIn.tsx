@@ -34,7 +34,6 @@ export const SignIn = (props: Props) => {
       { url: "https://sellerapp.com", name: "__session" },
       async (sessionCookie) => {
         if (sessionCookie) {
-          console.log(sessionCookie.value);
           const functionInstance = getFunctions();
           var validateSessionCookie = httpsCallable(
             functionInstance,
@@ -48,7 +47,6 @@ export const SignIn = (props: Props) => {
               const customToken = result.data.customToken;
               const userCred = await signInAnonymously(customToken);
               const user = userCred.user;
-              console.log(user);
               const quota = await getQuota();
               setUserDetails({
                 ...userDetails,
@@ -56,7 +54,6 @@ export const SignIn = (props: Props) => {
                 quota,
               });
               const token = await userCred.user.getIdToken();
-              console.log(token, "token");
             }
           );
         } else {
@@ -84,7 +81,6 @@ export const SignIn = (props: Props) => {
     try {
       const userCreds = await signIn(email, password);
       const user = await userCreds.user;
-      console.log(user);
       const quota = await getQuota();
       setUserDetails({
         ...userDetails,
@@ -92,7 +88,6 @@ export const SignIn = (props: Props) => {
         quota,
       });
 
-      console.log(userDetails, "userDetails");
       setSuccess(true);
     } catch (error: any) {
       setError(error.message);

@@ -6,7 +6,6 @@ import {
 } from "firebase/auth";
 import React, { useContext, useState } from "react";
 import { getAuthentication } from "../../Auth";
-import axios from "axios";
 import { axiosAuthInstance } from "../axios_base";
 import { set } from "lodash";
 import { Button, Input } from "antd";
@@ -57,7 +56,6 @@ export const SignUp = (props: Props) => {
         claimsPayload
       );
       const updatedToken = await user.getIdToken(true);
-      console.log(updatedToken, "updatedToken", updateClaimsResponse);
       return user;
     } catch (error: any) {
       setError(error.message);
@@ -71,7 +69,6 @@ export const SignUp = (props: Props) => {
 
     try {
       const user = await signUpUser(email, password, "");
-      console.log(user);
       const quota = await getQuota();
       setUserDetails({
         ...userDetails,

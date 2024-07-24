@@ -20,7 +20,6 @@ export const PaymentModal = (props: Props) => {
   }
   const { userDetails, setUserDetails } = userContext;
   useEffect(() => {
-    console.log(props.openPopup);
     handlePopup(props.openPopup);
   }, [props.openPopup]);
   // const showModal = () => {

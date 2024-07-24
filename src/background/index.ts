@@ -14,7 +14,6 @@ const handleSignIn = () => {
       console.error(chrome.runtime.lastError);
       return;
     } else if (token) {
-      console.log(token, "token");
       // Authorize Firebase with the OAuth Access Token.
       const auth = getAuthentication();
 
@@ -57,7 +56,6 @@ const handleSignIn = () => {
               }
             );
           }
-          console.log(error, "error");
           // response({
           //   message: getError(error.code),
           //   code: error.code,

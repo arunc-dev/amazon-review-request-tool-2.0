@@ -8,7 +8,6 @@ export const axiosAuthInstance = await axios.create({
 
 axiosAuthInstance.interceptors.request.use(
   (config) => {
-    console.log(config);
     // Do something before request is sent
     return new Promise(async (resolve, reject) => {
       const headers = config.headers;
@@ -33,13 +32,11 @@ export const fetchQuota = () => {
 };
 
 export const updateQuota = (usage: number) => {
-  console.log(usage);
   const request = axiosAuthInstance.post<FetchQuotaResponse>(
     "/auth/extension/review_request?feature=ext",
     {
       usage,
     }
   );
-  console.log(request, "request");
   return request;
 };

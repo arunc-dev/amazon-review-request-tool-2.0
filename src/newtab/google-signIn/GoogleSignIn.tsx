@@ -19,25 +19,21 @@ export const GoogleSignIn = (props: Props) => {
   const { userDetails, setUserDetails } = userContext;
   const handleGoogleLogin = async () => {
     chrome.identity.getAuthToken({ interactive: false }, async (token) => {
-      console.log(token, "fafvahvjfhashfafjh");
       if (chrome.runtime.lastError) {
         console.error(chrome.runtime.lastError);
         // return;
       } else if (token) {
-        console.log(token, "token");
         // Authorize Firebase with the OAuth Access Token.
         const auth = getAuthentication();
 
         // const provider = new GoogleAuthProvider();
         const credential = GoogleAuthProvider.credential(null, token);
         const userCreds = await signInWithCredential(auth, credential);
-        console.log(userCreds, "userCreds");
         const isNewUser = getAdditionalUserInfo(userCreds)?.isNewUser;
         // signInWithCredential(auth, credential)
         //   .then(async (data) => {
         //     // const { isNewUser } = getAdditionalUserInfo(data);
         //     const { uid } = data.user;
-        console.log(getAdditionalUserInfo(userCreds), "fashasjfgaujsgfu");
         if (isNewUser) {
           const claimsPayload = {
             claims: {

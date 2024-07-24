@@ -159,7 +159,6 @@ const ReviewTable = (props: {
         ...JSON.parse(JSON.stringify(pagination)),
         pageSize,
       };
-      console.log(isFreeUser, "isFreeUser", paginationParams);
       setPagination({ ...pagination, pageSize });
       fetchReviewDetails(pageSize, pagination.current);
     })();
@@ -168,7 +167,6 @@ const ReviewTable = (props: {
   useEffect(() => {
     const auth = getAuthentication();
     auth.onAuthStateChanged(async (user) => {
-      console.log(user);
       if (user) {
         const quota = await getQuota();
         setUserDetails({
@@ -176,18 +174,14 @@ const ReviewTable = (props: {
           user,
           quota,
         });
-        console.log(user, "User is signed in");
       } else {
         const quota = await getQuota();
-        console.log(quota, "quotafsfsfiufbiu");
         setUserDetails({
           ...userDetails,
           user,
           quota,
         });
-        console.log("User is signed out");
       }
-      console.log(userDetails);
     });
     axios
       .post(
@@ -358,7 +352,6 @@ const ReviewTable = (props: {
   };
 
   const bulkReviewRequest = async () => {
-    console.log(userDetails.quota);
     if (
       userDetails.quota.usage >= userDetails.quota.limit ||
       selectedRows.length > userDetails.quota.limit - userDetails.quota.usage
@@ -388,10 +381,8 @@ const ReviewTable = (props: {
 
   const checkAndUpdateQuota = async (records: DataType[]) => {
     const successRecords = records.filter((record) => record.errorMessage);
-    console.log(successRecords);
     if (successRecords.length > 0) {
       let usage = 0;
-      console.log(userDetails.quota?.usage, "fasfafasfasfs");
       usage = userDetails.quota?.usage + successRecords.length;
       setUserDetails({
         ...userDetails,
@@ -402,7 +393,6 @@ const ReviewTable = (props: {
       });
       const user = await getAuthentication().currentUser;
       if (user) {
-        console.log(user);
         try {
           await updateQuota(successRecords.length);
         } catch (error) {
@@ -421,7 +411,6 @@ const ReviewTable = (props: {
       } else {
         try {
           const currentUsage = await getQuota();
-          console.log(currentUsage, "currentUsage");
           const usage = currentUsage.usage + successRecords.length;
           await setTimed(
             "quota",
