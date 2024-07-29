@@ -8,6 +8,7 @@ import { PaymentModal } from "./payment-modal/PaymentModal";
 import { UserContext, UserContextProvider } from "./UserContext";
 import { getQuota } from "./helpers";
 import { set } from "lodash";
+import axios from "axios";
 
 export const NewTab = () => {
   // const navigate = useNavigate();
@@ -45,8 +46,16 @@ export const NewTab = () => {
   const handleQuotaExhaust = () => {
     //to reopen the modal. This is a hack to reopen the modal
     setPopupState(false);
-    setTimeout(() => {
+    setTimeout(async () => {
       setPopupState(true);
+      try {
+        await axios.post(
+          "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
+          {
+            message: `User opened popup`,
+          }
+        );
+      } catch {}
     }, 0);
   };
   return (

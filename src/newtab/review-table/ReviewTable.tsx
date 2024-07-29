@@ -131,7 +131,7 @@ const ReviewTable = (props: {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [pageContext, setPageContext] = useState(null);
   const [date, setDate] = useState<[Dayjs, Dayjs]>([
-    dayjs().subtract(6, "day").startOf("day"),
+    dayjs().subtract(12, "day").startOf("day"),
     dayjs().subtract(6, "day").endOf("day"),
   ]);
 
@@ -573,6 +573,22 @@ const ReviewTable = (props: {
     setDate([dateToPass[0], dateToPass[1]]);
     fetchReviewDetails(pagination.pageSize, 1, dateToPass);
   };
+
+  const subscribe = async () => {
+    try {
+      await axios.post(
+        "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
+        {
+          message: `User clicked on subscribe`,
+        }
+      );
+    } catch {}
+
+    (window as any).open(
+      "https://dashboard.sellerapp.com/extension-subscription",
+      "_self"
+    );
+  };
   return (
     <div className="reviewTable">
       <div
@@ -586,15 +602,7 @@ const ReviewTable = (props: {
         </h4>
         <div className="flex space-x-3">
           {userDetails.quota.limit <= 10 ? (
-            <Button
-              type="primary"
-              onClick={() =>
-                (window as any).open(
-                  "https://dashboard.sellerapp.com/extension-subscription",
-                  "_self"
-                )
-              }
-            >
+            <Button type="primary" onClick={() => subscribe()}>
               Subscribe
             </Button>
           ) : null}
