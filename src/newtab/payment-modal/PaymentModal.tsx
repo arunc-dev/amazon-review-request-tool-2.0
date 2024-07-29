@@ -7,6 +7,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { SignIn } from "../sign-in/SignIn";
 import { SignUp } from "../sign-up/SignUp";
 import { UserContext } from "../UserContext";
+import axios from "axios";
 
 type Props = {
   openPopup: boolean;
@@ -58,22 +59,41 @@ export const PaymentModal = (props: Props) => {
               <Button
                 type="primary"
                 className="mr-4"
-                onClick={() =>
+                onClick={async () => {
+                  try {
+                    await axios.post(
+                      "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
+                      {
+                        message: `User clicked on subscribe`,
+                        quota: userDetails?.quota,
+                      }
+                    );
+                  } catch {}
+
                   (window as any).open(
                     "https://dashboard.sellerapp.com/extension-subscription",
                     "_self"
-                  )
-                }
+                  );
+                }}
               >
                 Subscribe to Pro Version - $10
               </Button>
               <Button
-                onClick={() =>
+                onClick={async () => {
+                  try {
+                    await axios.post(
+                      "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
+                      {
+                        message: `User clicked on contact us`,
+                        quota: userDetails?.quota,
+                      }
+                    );
+                  } catch {}
                   (window as any).open(
                     "https://www.sellerapp.com/contact.html",
                     "_blank"
-                  )
-                }
+                  );
+                }}
               >
                 Get in Touch
               </Button>

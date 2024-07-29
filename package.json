@@ -3,7 +3,7 @@
   "displayName": "Amazon Review Request Tool",
   "description": "Use SellerApp’s free Amazon Review Request Tool to generate hassle-free review requests in one go",
   "short_name": "SellerApp's Amazon reviewer",
-  "version": "2.0.5",
+  "version": "2.0.13",
   "author": "",
   "type": "module",
   "license": "MIT",

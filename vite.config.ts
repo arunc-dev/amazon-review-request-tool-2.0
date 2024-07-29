@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
           chunkFileNames: "assets/chunk-[hash].js",
         },
       },
+      target: "esnext",
     },
     plugins: [
       crx({ manifest }),

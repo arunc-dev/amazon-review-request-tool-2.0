@@ -22,6 +22,7 @@ import { updateQuota } from "../axios_base";
 import moment from "moment";
 import { getQuota } from "../helpers";
 import { PaginationConfig } from "antd/es/pagination";
+import manifest from "../../manifest";
 const { RangePicker } = DatePicker;
 const webhookUrl =
   "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription";
@@ -289,8 +290,8 @@ const ReviewTable = (props: {
       }
       record.isLoading = false;
       if (type === "single") {
-        sendWebHook([record], type);
-        checkAndUpdateQuota([record]);
+        await checkAndUpdateQuota([record]);
+        await sendWebHook([record], type);
       }
       setReviewData([...reviewData]);
       return record;
@@ -308,6 +309,7 @@ const ReviewTable = (props: {
       set("uuid", uuid);
     }
     let text = `uuid: ${uuid}\ndate: ${date.toString()}`;
+    const manifestData = chrome.runtime.getManifest();
     let data: {
       uuid: string;
       date: string;
@@ -316,6 +318,9 @@ const ReviewTable = (props: {
       customerId: string;
       marketplace: string;
       merchantId: string;
+      version: string;
+      email: string;
+      quota: any;
     } = {
       uuid: uuid,
       date: date.toString(),
@@ -324,6 +329,9 @@ const ReviewTable = (props: {
       customerId: (pageContext as any)?.obfuscatedCustomerId,
       merchantId: (pageContext as any)?.obfuscatedMerchantCustomerId,
       marketplace: props.amazonEndpoint,
+      version: manifestData.version,
+      email: userDetails.user?.email,
+      quota: userDetails?.quota,
     };
     for (const record of records) {
       try {
@@ -369,18 +377,18 @@ const ReviewTable = (props: {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       if (recordsAfterCall.length > 0 && recordsAfterCall) {
-        sendWebHook(recordsAfterCall, "bulk");
+        await checkAndUpdateQuota(recordsAfterCall);
+        await sendWebHook(recordsAfterCall, "bulk");
       }
 
       setSelectedRows([]);
       setSelectedRowKeys([]);
       setBulkLoading(false);
-      checkAndUpdateQuota(recordsAfterCall);
     }
   };
 
   const checkAndUpdateQuota = async (records: DataType[]) => {
-    const successRecords = records.filter((record) => record.errorMessage);
+    const successRecords = records.filter((record) => record.successMessage);
     if (successRecords.length > 0) {
       let usage = 0;
       usage = userDetails.quota?.usage + successRecords.length;
@@ -401,7 +409,7 @@ const ReviewTable = (props: {
             "quota",
             JSON.stringify({
               frequency: "",
-              limit: 5,
+              limit: 10,
               next_reset: "",
               usage: usage,
             }),
@@ -412,11 +420,12 @@ const ReviewTable = (props: {
         try {
           const currentUsage = await getQuota();
           const usage = currentUsage.usage + successRecords.length;
+          const limit = currentUsage.limit;
           await setTimed(
             "quota",
             JSON.stringify({
               frequency: "",
-              limit: 5,
+              limit: limit,
               next_reset: "",
               usage: usage,
             }),
@@ -446,7 +455,7 @@ const ReviewTable = (props: {
     setReviewLoading(true);
     try {
       const response = await axios.get<ReviewResponseModel>(
-        `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_desc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
+        `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_asc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
       );
       if (typeof response.data === "string") {
         props.isSignedIn(false);
@@ -576,6 +585,19 @@ const ReviewTable = (props: {
           Total Orders ({pagination.total})
         </h4>
         <div className="flex space-x-3">
+          {userDetails.quota.limit <= 10 ? (
+            <Button
+              type="primary"
+              onClick={() =>
+                (window as any).open(
+                  "https://dashboard.sellerapp.com/extension-subscription",
+                  "_self"
+                )
+              }
+            >
+              Subscribe
+            </Button>
+          ) : null}
           <Button
             type="primary"
             loading={bulkLoading}
@@ -585,7 +607,7 @@ const ReviewTable = (props: {
           >
             Bulk Request Reviews
           </Button>
-          <Tooltip
+          {/* <Tooltip
             title={
               userContext.userDetails.quota.limit > 10
                 ? "Select Date Range"
@@ -598,6 +620,24 @@ const ReviewTable = (props: {
               defaultValue={[date[0], date[1]]}
               onChange={dateChangeHandler}
               disabled={userContext.userDetails.quota.limit <= 10}
+              title="Select Date Range"
+            />
+          </Tooltip> */}
+          <Tooltip
+            title={
+              userContext.userDetails.quota.limit > 10
+                ? "Select Date Range"
+                : "Subscribe to see orders for 30 days"
+            }
+          >
+            <RangePicker
+              minDate={dayjs().subtract(
+                userDetails.quota.limit <= 10 ? 12 : 36,
+                "day"
+              )}
+              maxDate={dayjs().subtract(6, "day")}
+              defaultValue={[date[0], date[1]]}
+              onChange={dateChangeHandler}
               title="Select Date Range"
             />
           </Tooltip>
@@ -626,7 +666,7 @@ const ReviewTable = (props: {
             dataSource={reviewData}
             pagination={{
               ...pagination,
-              disabled: userDetails.quota.limit <= 10,
+              disabled: false,
             }}
             onChange={handleTableChange}
           />
