@@ -87,3 +87,12 @@ export const checkAndShowThankyou = () => {
 
 checkAndShowThankyou();
 // handleSignIn();
+
+//force update extension
+function handleUpdateAvailable(details: any) {
+  console.log(details.version);
+  // Proceed to upgrade the add-on
+  chrome.runtime.reload();
+}
+
+chrome.runtime.onUpdateAvailable.addListener(handleUpdateAvailable);
