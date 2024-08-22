@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import {
   Button,
+  Rate,
   Spin,
   Table,
   TableColumnsType,
@@ -9,8 +10,8 @@ import {
   Tooltip,
 } from "antd";
 import { ReviewResponseModel } from "../interfaces/review-response.interface";
-import _ from "lodash";
-import { requestReview } from "./review-request.service";
+import _, { filter } from "lodash";
+import { RefundStatusResponse, requestReview } from "./review-request.service";
 import { get, getTimed, set, setTimed } from "../../helpers/Cache";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
@@ -23,10 +24,17 @@ import moment from "moment";
 import { getQuota } from "../helpers";
 import { PaginationConfig } from "antd/es/pagination";
 import manifest from "../../manifest";
+import {
+  ReviewFilters,
+  ReviewFiltersEnum,
+} from "../review-filters/ReviewFilters";
+import { fetchDetails, parse } from "sellerapp-scraper/dist/utils/helpers";
+import { reviewCountSchema } from "sellerapp-scraper/dist/utils/config";
 const { RangePicker } = DatePicker;
 const webhookUrl =
   "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription";
 const dateFormat = "YYYY-MM-DD";
+
 interface ProductDataType {
   productName: string;
   productImage: string;
@@ -36,6 +44,8 @@ interface ProductDataType {
   productLink: string;
   country: string;
   orderItemId: string;
+  productDetails?: any;
+  enabled?: boolean;
 }
 interface DataType {
   key: React.Key;
@@ -50,6 +60,7 @@ interface DataType {
   errorMessage?: string;
   isLoading?: boolean;
   products: ProductDataType[];
+  enabled?: boolean;
 }
 
 const renderProductColumn = (text: string, record: DataType) => (
@@ -57,7 +68,7 @@ const renderProductColumn = (text: string, record: DataType) => (
     {record.products.map((item, index) => (
       <div
         key={item.orderItemId}
-        className="row flex space-x-2 justify-center items-center pt-1 pb-1"
+        className="row flex space-x-2 justify-center items-start pt-1 pb-1"
         style={{
           borderBottom:
             index !== record.products.length - 1
@@ -84,8 +95,27 @@ const renderProductColumn = (text: string, record: DataType) => (
             SKU: <b>{item.sku}</b>
           </span>
           <span>
-            {" "}
             Quantity Ordered: <b>{item.quantityOrdered}</b>
+          </span>
+          <span>
+            {" "}
+            <div className="flex flex-row items-center justify-start space-x-2">
+              Rating:
+              <Tooltip title={item.productDetails?.rating} className="ml-2">
+                <Rate
+                  disabled
+                  defaultValue={item.productDetails.rating}
+                  tooltips={item.productDetails.rating}
+                  allowHalf={true}
+                />
+              </Tooltip>
+              <Tooltip title="# of ratings">
+                <b className="ml-2">{item.productDetails.global_ratings}</b>
+              </Tooltip>
+            </div>
+          </span>
+          <span>
+            Reviews: <b>{item.productDetails.total_review_formatted}</b>
           </span>
         </div>
       </div>
@@ -106,6 +136,24 @@ const renderOrderDetailsColumn = (text: string, record: DataType) => (
     </span>
   </div>
 );
+let productDetails: any = {};
+const getProductDetails = async (asin: string, url: string) => {
+  const baseUrlMatch = url.match(/^(https:\/\/www\.amazon\.[a-z\.]+)/);
+  let reviewUrl = "";
+  if (!baseUrlMatch) {
+    return;
+  } else {
+    reviewUrl = `${baseUrlMatch[1]}/product-reviews/${asin}`;
+  }
+  if (productDetails[asin]) {
+    console.log("already fetched");
+  } else {
+    const response = await fetchDetails(reviewUrl);
+    const productDetailsParsed = parse(response as string, reviewCountSchema);
+    console.log(productDetailsParsed, "productDetailsParsed");
+    productDetails[asin] = productDetailsParsed;
+  }
+};
 
 const ReviewTable = (props: {
   amazonEndpoint: string;
@@ -115,6 +163,7 @@ const ReviewTable = (props: {
 }) => {
   const [page, setPage] = useState(0);
   const [reviewData, setReviewData] = useState<DataType[]>([]);
+  const [filteredData, setFilteredData] = useState<DataType[]>([]);
   const [pagination, setPagination] = useState<any>({
     current: 1,
     pageSize: 10,
@@ -130,11 +179,19 @@ const ReviewTable = (props: {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [pageContext, setPageContext] = useState(null);
+  const [availableStatus, setavailableStatus] = useState<string[]>([]);
   const [date, setDate] = useState<[Dayjs, Dayjs]>([
     dayjs().subtract(12, "day").startOf("day"),
     dayjs().subtract(6, "day").endOf("day"),
   ]);
-
+  const [queryValues, setQueryValues] = useState({ q: "", qt: "orderid" });
+  const [inPageFilters, setInpageFilters] = useState<{
+    [key in ReviewFiltersEnum]: string[];
+  }>({
+    rating: [],
+    orderStatus: [],
+    orderType: [],
+  });
   // useEffect(() => {
   //   if (userContext.userDetails.quota.limit <= 10) {
   //     setPagination({
@@ -238,15 +295,17 @@ const ReviewTable = (props: {
               <p className="text-green-500">Already Requested</p>
             ) : (
               <div>
-                <Button
-                  type="link"
-                  loading={record.isLoading}
-                  iconPosition={"end"}
-                  className="text-[#094CC0] pl-0"
-                  onClick={() => requestCustomerReview(record, "single")}
-                >
-                  Request Review
-                </Button>
+                {record.successMessage ? null : (
+                  <Button
+                    type="link"
+                    loading={record.isLoading}
+                    iconPosition={"end"}
+                    className="text-[#094CC0] pl-0"
+                    onClick={() => requestCustomerReview(record, "single")}
+                  >
+                    Request Review
+                  </Button>
+                )}
                 <p className="text-green-500">{record.successMessage}</p>
                 <p className="text-red-500">{record.errorMessage}</p>
               </div>
@@ -447,15 +506,25 @@ const ReviewTable = (props: {
     }
   };
 
+  const patchRefundStatus = async (filteredData: DataType[]) => {
+    const orderIds = filteredData.map((order) => order.orderId);
+    const response = await axios.get(
+      `https://sellercentral.amazon.in/orders-api/refund-status?orderId=${orderIds.join(",")}`
+    );
+    console.log(response.data, "response.data");
+    return response.data;
+  };
+
   const fetchReviewDetails = async (
     pageSize: number,
     current: number,
-    dateDetails: any = date
+    dateDetails: any = date,
+    query: { q: string; qt: string } = queryValues
   ) => {
     setReviewLoading(true);
     try {
       const response = await axios.get<ReviewResponseModel>(
-        `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_asc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false`
+        `${props.amazonEndpoint}/orders-api/search?limit=${pageSize}&offset=${pageSize * current - pageSize}&sort=order_date_asc&date-range=${dateDetails[0].unix() * 1000}-${dateDetails[1].unix() * 1000}&fulfillmentType=all&orderStatus=shipped&forceOrdersTableRefreshTrigger=false${query.qt && query.q ? "&q=" + query.q + "&qt=" + query.qt : ""}`
       );
       if (typeof response.data === "string") {
         props.isSignedIn(false);
@@ -467,6 +536,7 @@ const ReviewTable = (props: {
           pageSize: pageSize,
           total: response.data.total,
         });
+        await getProductData(response.data);
         transformOrderData(response.data);
       }
     } catch (error) {
@@ -511,6 +581,24 @@ const ReviewTable = (props: {
   //   setReviewData(allOrders);
   //   setReviewLoading(false);
   // };
+  const getProductData = async (data: ReviewResponseModel) => {
+    const productAsinAndUrl: { asin: string; url: string }[] = [];
+    data.orders.forEach((order) => {
+      order.orderItems.forEach((item) => {
+        productAsinAndUrl.push({
+          asin: item.asin,
+          url: item.productLink,
+        });
+      });
+    });
+    const uniqueAsins = _.uniq(productAsinAndUrl.map((item) => item.asin));
+    for (const asin of uniqueAsins) {
+      await getProductDetails(
+        asin,
+        productAsinAndUrl.find((item) => item.asin === asin)?.url as string
+      );
+    }
+  };
   const transformOrderData = async (data: ReviewResponseModel) => {
     let allOrders: DataType[] = [];
     const orderItems = await Promise.all(
@@ -530,7 +618,7 @@ const ReviewTable = (props: {
           orderStatus: order.orderFulfillmentStatus,
           homeMarketplaceId: order.homeMarketplaceId,
           isRequested: order.isRequested,
-
+          enabled: true,
           products: order.orderItems.map((item) => {
             return {
               productName: item.productName,
@@ -541,13 +629,29 @@ const ReviewTable = (props: {
               productLink: item.productLink,
               country: item.billingCountry,
               orderItemId: item.orderItemId,
+              productDetails: productDetails[item.asin],
             };
           }),
         };
       })
     );
     allOrders.push(...orderItems);
-    setReviewData(allOrders);
+    // const status = allOrders.map((order) => order.orderStatus);
+    // setavailableStatus(_.uniq(status));
+
+    // setReviewData(allOrders);
+    const refundResponse: RefundStatusResponse =
+      await patchRefundStatus(allOrders);
+    for (const order of allOrders) {
+      const refundStatus = refundResponse.refundSummaryList.find(
+        (refund) => refund.OrderId === order.orderId
+      );
+      if (refundStatus) {
+        order.orderStatus = "Refunded";
+      }
+    }
+    handleInpageFilterChange(inPageFilters, allOrders);
+    console.log(allOrders, "allOrders");
     setReviewLoading(false);
   };
   const handleTableChange = (
@@ -574,23 +678,83 @@ const ReviewTable = (props: {
     fetchReviewDetails(pagination.pageSize, 1, dateToPass);
   };
 
-  const subscribe = async () => {
-    try {
-      await axios.post(
-        "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
-        {
-          message: `User clicked on subscribe`,
-        }
-      );
-    } catch {}
+  const handleFilterChange = (qtOption: string, qtValue: string) => {
+    const query = { q: qtValue, qt: qtOption };
+    setQueryValues(query);
+    fetchReviewDetails(pagination.pageSize, 1, date, query);
+  };
 
-    (window as any).open(
-      "https://dashboard.sellerapp.com/extension-subscription",
-      "_self"
-    );
+  const handleInpageFilterChange = (
+    filters: {
+      [key in ReviewFiltersEnum]: string[];
+    },
+    orders: DataType[] = reviewData
+  ) => {
+    setInpageFilters(filters);
+    const filteredData: DataType[] = [];
+    orders.forEach((record) => {
+      record.enabled = true;
+      console.log(filters, "filters.rating");
+      if (filters.rating.length > 0) {
+        console.log("1st step", filters.rating.sort());
+        filters.rating
+          .sort((a, b) => +b - +a)
+          .forEach((rat) => {
+            console.log("2st step", rat);
+            if (
+              record.products.some((product) => {
+                console.log(+product.productDetails.rating, +rat);
+                return +product.productDetails.rating >= +rat;
+              })
+            ) {
+              console.log("3st step", rat);
+
+              record.enabled = true;
+            } else {
+              record.enabled = false;
+            }
+          });
+      }
+      if (filters.orderStatus.length > 0) {
+        if (
+          filters.orderStatus.includes(record.orderStatus) &&
+          record.enabled
+        ) {
+          record.enabled = true;
+        } else {
+          record.enabled = false;
+        }
+      }
+
+      if (filters.orderType.length > 0) {
+        if (filters.orderType.includes(record.orderType) && record.enabled) {
+          record.enabled = true;
+        } else {
+          record.enabled = false;
+        }
+      }
+
+      if (
+        filters.rating.length === 0 &&
+        filters.orderStatus.length === 0 &&
+        filters.orderType.length === 0
+      ) {
+        record.enabled = true;
+      }
+      filteredData.push(record);
+    });
+    console.log(reviewData, "reviewData");
+    setReviewData(orders);
+    setFilteredData(filteredData.filter((record) => record.enabled));
   };
   return (
     <div className="reviewTable">
+      <ReviewFilters
+        onFilterChange={handleFilterChange}
+        availableOrderStatus={availableStatus}
+        onInPageFilterChange={handleInpageFilterChange}
+        isDisabled={bulkLoading || reviewLoading}
+      />
       <div
         className={`my-5 justify-between items-center flex ${
           reviewLoading ? "hidden" : "block"
@@ -601,11 +765,6 @@ const ReviewTable = (props: {
           Total Orders ({pagination.total})
         </h4>
         <div className="flex space-x-3">
-          {userDetails.quota.limit <= 10 ? (
-            <Button type="primary" onClick={() => subscribe()}>
-              Subscribe
-            </Button>
-          ) : null}
           <Button
             type="primary"
             loading={bulkLoading}
@@ -670,8 +829,11 @@ const ReviewTable = (props: {
               ...rowSelection,
               selectedRowKeys,
             }}
+            rowClassName={(record, index) =>
+              record.enabled ? "" : "disabled-row"
+            }
             columns={columns}
-            dataSource={reviewData}
+            dataSource={filteredData}
             pagination={{
               ...pagination,
               disabled: false,

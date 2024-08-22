@@ -2,6 +2,19 @@ import axios from "axios";
 import { setTimed } from "../../helpers/Cache";
 import moment from "moment";
 
+export interface RefundStatusResponse {
+  refundSummaryList: RefundSummaryList[];
+}
+
+export interface RefundSummaryList {
+  ItemMap: ItemMap;
+  OrderId: string;
+  RefundStatus: string;
+}
+
+export interface ItemMap {
+  "+NE7Z+p/vbCrXqSDNFY7hh1YR+fjIrElgUqvzS9eEVK0UF/Ou/U+jw==": number;
+}
 export const requestReview = async (
   baseDomain: string,
   amazonOrderId: string,

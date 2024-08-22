@@ -2,6 +2,7 @@ import { Select } from "antd";
 import React, { useEffect } from "react";
 import { geoMaps, GeoMapsModel } from "../constants/geo-constants";
 import { CircleFlag } from "react-circle-flags";
+import { get, set } from "../../helpers/Cache";
 
 export const ReviewGeoDropdown = (props: {
   selectedGeo: (geoDetails: GeoMapsModel) => void;
@@ -9,10 +10,16 @@ export const ReviewGeoDropdown = (props: {
   const geoAsArray = Object.keys(geoMaps).map((key: any, index) => {
     return { ...geoMaps[key], key, uniqueKey: key };
   });
-  const onChange = (value: any) => {
+  const onChange = async (value: any) => {
+    // await set("selectedGeo", value);
     props.selectedGeo(geoMaps[value]);
   };
-  useEffect(() => {}, []);
+  useEffect(() => {
+    // (async () => {
+    //   const selectedGeoUniqueKey = await get("selectedGeo");
+    //   onChange(selectedGeoUniqueKey);
+    // })();
+  }, []);
   return (
     <Select
       className="min-w-56"

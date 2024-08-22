@@ -16,6 +16,7 @@ import {
   UserCredential,
 } from "firebase/auth";
 import { LogoutOutlined } from "@ant-design/icons";
+import axios from "axios";
 
 const twoColors: ProgressProps["strokeColor"] = {
   "0%": "#09B253",
@@ -110,6 +111,21 @@ export default function ReviewRequestContainer(props: Props) {
 
     return () => {};
   }, []);
+  const subscribe = async () => {
+    try {
+      await axios.post(
+        "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription",
+        {
+          message: `User clicked on subscribe`,
+        }
+      );
+    } catch {}
+
+    (window as any).open(
+      "https://dashboard.sellerapp.com/extension-subscription",
+      "_self"
+    );
+  };
   const signInWithCustomTokenHandler = (
     token: string
   ): Promise<UserCredential> => {
@@ -120,6 +136,11 @@ export default function ReviewRequestContainer(props: Props) {
   const [refreshPage, setRefreshPage] = useState(true);
   const handleSignIn = (isSignedIn: boolean) => {
     setIsLoggedIn(isSignedIn);
+  };
+  const openFeedbackForm = () => {
+    window.open(
+      "https://docs.google.com/forms/d/e/1FAIpQLScygCtSZiISY6IfVFuIBUphmovWrIoGGzNMOq0iWDryRUjZDg/viewform"
+    );
   };
   return (
     <Layout className="p-4 bg-white mb-10" style={{ padding: "0 48px" }}>
@@ -135,6 +156,25 @@ export default function ReviewRequestContainer(props: Props) {
             ""
           ) : (
             <div className="flex flex-row space-x-4 items-center">
+              <Tooltip
+                title={
+                  userDetails.quota.limit > 1000
+                    ? ""
+                    : "Feature Request available only for Premium users"
+                }
+              >
+                <Button
+                  onClick={() => openFeedbackForm()}
+                  disabled={userDetails.quota.limit <= 10}
+                >
+                  Request Feature
+                </Button>
+              </Tooltip>
+              {userDetails.quota.limit <= 10 ? (
+                <Button type="primary" onClick={() => subscribe()}>
+                  Upgrade to Premium
+                </Button>
+              ) : null}
               {userDetails.quota.limit > 10 ? (
                 <Tag color="success" className="px-3 py-1">
                   Premium
