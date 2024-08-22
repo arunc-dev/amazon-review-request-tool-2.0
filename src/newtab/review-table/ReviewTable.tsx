@@ -102,12 +102,13 @@ const renderProductColumn = (text: string, record: DataType) => (
             <div className="flex flex-row items-center justify-start space-x-2">
               Rating:
               <Tooltip title={item.productDetails?.rating} className="ml-2">
-                <Rate
-                  disabled
-                  defaultValue={item.productDetails.rating}
-                  tooltips={item.productDetails.rating}
-                  allowHalf={true}
-                />
+                <div>
+                  <Rate
+                    disabled
+                    defaultValue={+item.productDetails.rating}
+                    allowHalf={true}
+                  />
+                </div>
               </Tooltip>
               <Tooltip title="# of ratings">
                 <b className="ml-2">{item.productDetails.global_ratings}</b>
@@ -268,6 +269,9 @@ const ReviewTable = (props: {
     {
       title: "Order Type",
       dataIndex: "orderType",
+      render: (text: string) => {
+        return <span>{_.startCase(text)}</span>;
+      },
     },
     {
       title: "Order Status",

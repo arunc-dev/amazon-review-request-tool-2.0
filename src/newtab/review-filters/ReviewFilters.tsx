@@ -137,6 +137,7 @@ export const ReviewFilters = (props: Props) => {
             options={[
               { label: "Expedited", value: "Expedited" },
               { label: "Standard", value: "Standard" },
+              { label: "Second Day", value: "SecondDay" },
             ]}
           />
           <Select
