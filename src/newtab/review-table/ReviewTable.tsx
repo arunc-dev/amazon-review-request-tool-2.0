@@ -10,8 +10,12 @@ import {
   Tooltip,
 } from "antd";
 import { ReviewResponseModel } from "../interfaces/review-response.interface";
-import _, { filter } from "lodash";
-import { RefundStatusResponse, requestReview } from "./review-request.service";
+import _, { filter, groupBy, lowerCase, map, startCase } from "lodash";
+import {
+  processInBatches,
+  RefundStatusResponse,
+  requestReview,
+} from "./review-request.service";
 import { get, getTimed, set, setTimed } from "../../helpers/Cache";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
@@ -29,7 +33,11 @@ import {
   ReviewFiltersEnum,
 } from "../review-filters/ReviewFilters";
 import { fetchDetails, parse } from "sellerapp-scraper/dist/utils/helpers";
-import { reviewCountSchema } from "sellerapp-scraper/dist/utils/config";
+import {
+  reviewCountSchema,
+  productSchema,
+} from "sellerapp-scraper/dist/utils/config";
+import { processProduct } from "sellerapp-scraper/dist/utils/productPreprocessor";
 const { RangePicker } = DatePicker;
 const webhookUrl =
   "https://api.sellerapp.com/slack/send?chanel_id=extension-subscription";
@@ -45,6 +53,7 @@ interface ProductDataType {
   country: string;
   orderItemId: string;
   productDetails?: any;
+  reviewDetails?: any;
   enabled?: boolean;
 }
 interface DataType {
@@ -62,6 +71,13 @@ interface DataType {
   products: ProductDataType[];
   enabled?: boolean;
 }
+const renderCategory = (allBsrRanks: any[]) => {
+  if (!allBsrRanks || !allBsrRanks.length) return "N/A";
+  const minObject = allBsrRanks.reduce((prev, current) =>
+    prev.rank < current.rank ? prev : current
+  );
+  return <span>{`${minObject.category} (${minObject.rank})`}</span>;
+};
 
 const renderProductColumn = (text: string, record: DataType) => (
   <div className="">
@@ -89,7 +105,16 @@ const renderProductColumn = (text: string, record: DataType) => (
             </a>
           </Tooltip>
           <span>
-            ASIN: <b>{item.asin}</b>
+            ASIN:{" "}
+            <b>
+              <a
+                className="truncate ..."
+                href={item.productLink}
+                target="_blank"
+              >
+                {item.asin}
+              </a>
+            </b>
           </span>
           <span>
             SKU: <b>{item.sku}</b>
@@ -101,23 +126,30 @@ const renderProductColumn = (text: string, record: DataType) => (
             {" "}
             <div className="flex flex-row items-center justify-start space-x-2">
               Rating:
-              <Tooltip title={item.productDetails?.rating} className="ml-2">
+              <Tooltip title={item?.reviewDetails?.rating} className="ml-2">
                 <div>
                   <Rate
                     disabled
-                    defaultValue={+item.productDetails.rating}
+                    defaultValue={+item?.reviewDetails?.rating}
                     allowHalf={true}
                   />
+                  {/* <p>{item.reviewDetails.rating}</p> */}
                 </div>
               </Tooltip>
               <Tooltip title="# of ratings">
-                <b className="ml-2">{item.productDetails.global_ratings}</b>
+                <b className="ml-2">{item?.reviewDetails?.global_ratings}</b>
               </Tooltip>
             </div>
           </span>
           <span>
-            Reviews: <b>{item.productDetails.total_review_formatted}</b>
+            Reviews: <b>{item?.reviewDetails?.total_review_formatted}</b>
           </span>
+          {/* <span>
+            Date Available: <b>{item.productDetails.date_first_available}</b>
+          </span>
+          <span>
+            Category: <b>{renderCategory(item.productDetails.allBsrRanks)}</b>
+          </span> */}
         </div>
       </div>
     ))}
@@ -138,21 +170,61 @@ const renderOrderDetailsColumn = (text: string, record: DataType) => (
   </div>
 );
 let productDetails: any = {};
-const getProductDetails = async (asin: string, url: string) => {
-  const baseUrlMatch = url.match(/^(https:\/\/www\.amazon\.[a-z\.]+)/);
-  let reviewUrl = "";
-  if (!baseUrlMatch) {
-    return;
-  } else {
-    reviewUrl = `${baseUrlMatch[1]}/product-reviews/${asin}`;
+let reviewDetails: any = {};
+
+const getReviewDetails = async (
+  uniqProducts: { asin: string; url: string }[]
+) => {
+  const tempArray: any = [];
+  for (const product of uniqProducts) {
+    const baseUrlMatch = product.url.match(
+      /^(https:\/\/www\.amazon\.[a-z\.]+)/
+    );
+    let reviewUrl = "";
+    if (!baseUrlMatch) {
+      return;
+    } else {
+      reviewUrl = `${baseUrlMatch[1]}/product-reviews/${product.asin}`;
+    }
+
+    if (reviewDetails[product.asin]) {
+    } else {
+      tempArray.push({
+        asin: product.asin,
+        api: () => fetchDetails(reviewUrl),
+      });
+    }
   }
-  if (productDetails[asin]) {
-    console.log("already fetched");
-  } else {
-    const response = await fetchDetails(reviewUrl);
-    const productDetailsParsed = parse(response as string, reviewCountSchema);
-    console.log(productDetailsParsed, "productDetailsParsed");
-    productDetails[asin] = productDetailsParsed;
+  const data = await processInBatches(tempArray, 10);
+  if (data) {
+    for (const response of data) {
+      const reviewDetailsParsed = parse(
+        response.api as string,
+        reviewCountSchema
+      );
+      reviewDetails[response.asin] = reviewDetailsParsed;
+    }
+  }
+};
+const getProductDetails = async (
+  uniqProducts: { asin: string; url: string }[]
+) => {
+  const tempArray: any = [];
+  for (const product of uniqProducts) {
+    if (productDetails[product.asin]) {
+    } else {
+      tempArray.push({
+        asin: product.asin,
+        api: () => fetchDetails(product.url),
+      });
+    }
+  }
+  const data = await processInBatches(tempArray, 10);
+  if (data) {
+    for (const response of data) {
+      const productDetailsParsed = parse(response.api as string, productSchema);
+      productDetails[response.asin] = productDetailsParsed;
+    }
   }
 };
 
@@ -185,23 +257,15 @@ const ReviewTable = (props: {
     dayjs().subtract(12, "day").startOf("day"),
     dayjs().subtract(6, "day").endOf("day"),
   ]);
-  const [queryValues, setQueryValues] = useState({ q: "", qt: "orderid" });
+  const [queryValues, setQueryValues] = useState({ q: "", qt: "asin" });
   const [inPageFilters, setInpageFilters] = useState<{
     [key in ReviewFiltersEnum]: string[];
   }>({
     rating: [],
     orderStatus: [],
     orderType: [],
+    sortBy: [],
   });
-  // useEffect(() => {
-  //   if (userContext.userDetails.quota.limit <= 10) {
-  //     setPagination({
-  //       current: 1,
-  //       pageSize: 10,
-  //       total: 0,
-  //     });
-  //   }
-  // }, []);
   useEffect(() => {
     (async () => {
       let pageSizeCached: number = 10;
@@ -270,7 +334,7 @@ const ReviewTable = (props: {
       title: "Order Type",
       dataIndex: "orderType",
       render: (text: string) => {
-        return <span>{_.startCase(text)}</span>;
+        return <span>{startCase(text)}</span>;
       },
     },
     {
@@ -285,7 +349,7 @@ const ReviewTable = (props: {
                 : `px-4 py-2 bg-[#faefd7] text-[#f19822] rounded-lg`
             }
           >
-            {_.startCase(text)}
+            {startCase(text)}
           </span>
         );
       },
@@ -346,10 +410,9 @@ const ReviewTable = (props: {
         record.homeMarketplaceId
       );
       if (response.success) {
-        record.successMessage =
-          _.startCase(_.lowerCase(response.success)) || "";
+        record.successMessage = startCase(lowerCase(response.success)) || "";
       } else {
-        record.errorMessage = _.startCase(_.lowerCase(response.error)) || "";
+        record.errorMessage = startCase(lowerCase(response.error)) || "";
       }
       record.isLoading = false;
       if (type === "single") {
@@ -512,11 +575,14 @@ const ReviewTable = (props: {
 
   const patchRefundStatus = async (filteredData: DataType[]) => {
     const orderIds = filteredData.map((order) => order.orderId);
-    const response = await axios.get(
-      `https://sellercentral.amazon.in/orders-api/refund-status?orderId=${orderIds.join(",")}`
-    );
-    console.log(response.data, "response.data");
-    return response.data;
+    try {
+      const response = await axios.get(
+        `${props.amazonEndpoint}/orders-api/refund-status?orderId=${orderIds.join(",")}`
+      );
+      return response.data;
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   const fetchReviewDetails = async (
@@ -547,44 +613,6 @@ const ReviewTable = (props: {
       props.isSignedIn(false);
     }
   };
-  // const transformOrderData = async (data: ReviewResponseModel) => {
-  //   let allOrders: DataType[] = [];
-  //   await Promise.all(
-  //     data.orders.map(async (order) => {
-  //       const orderItems = await Promise.all(
-  //         order.orderItems.map(async (item) => {
-  //           try {
-  //             await getTimed(item.orderItemId);
-  //             item.isRequested = true;
-  //           } catch (error) {
-  //             item.isRequested = false;
-  //           }
-  //           return {
-  //             key: item.orderItemId,
-  //             productName: item.productName,
-  //             productImage: item.imageUrl,
-  //             asin: item.asin,
-  //             sku: item.sellerSku,
-  //             quantityOrdered: item.quantityOrdered,
-  //             orderId: order.amazonOrderId,
-  //             relativeOrderDate: order.relativeOrderDate,
-  //             salesChannel: order.salesChannel,
-  //             orderType: order.shippingService,
-  //             orderStatus: order.orderFulfillmentStatus,
-  //             country: item.billingCountry,
-  //             homeMarketplaceId: order.homeMarketplaceId,
-  //             isRequested: item.isRequested,
-  //             productLink: item.productLink,
-  //           };
-  //         })
-  //       );
-  //       console.log(orderItems);
-  //       allOrders.push(...orderItems);
-  //     })
-  //   );
-  //   setReviewData(allOrders);
-  //   setReviewLoading(false);
-  // };
   const getProductData = async (data: ReviewResponseModel) => {
     const productAsinAndUrl: { asin: string; url: string }[] = [];
     data.orders.forEach((order) => {
@@ -595,13 +623,19 @@ const ReviewTable = (props: {
         });
       });
     });
-    const uniqueAsins = _.uniq(productAsinAndUrl.map((item) => item.asin));
-    for (const asin of uniqueAsins) {
-      await getProductDetails(
-        asin,
-        productAsinAndUrl.find((item) => item.asin === asin)?.url as string
-      );
+    // const uniqueAsins = _.uniq(productAsinAndUrl.map((item) => item.asin));
+    function uniqueBy(array: any[], key: string) {
+      return map(groupBy(array, key), (group) => group[0]);
     }
+
+    const uniqueAsins: { asin: string; url: string }[] = uniqueBy(
+      productAsinAndUrl,
+      "asin"
+    );
+    try {
+      await getReviewDetails(uniqueAsins);
+    } catch {}
+    // await getProductDetails(uniqueAsins);
   };
   const transformOrderData = async (data: ReviewResponseModel) => {
     let allOrders: DataType[] = [];
@@ -633,21 +667,18 @@ const ReviewTable = (props: {
               productLink: item.productLink,
               country: item.billingCountry,
               orderItemId: item.orderItemId,
-              productDetails: productDetails[item.asin],
+              reviewDetails: reviewDetails[item.asin],
+              // productDetails: processProduct(productDetails[item.asin]),
             };
           }),
         };
       })
     );
     allOrders.push(...orderItems);
-    // const status = allOrders.map((order) => order.orderStatus);
-    // setavailableStatus(_.uniq(status));
-
-    // setReviewData(allOrders);
     const refundResponse: RefundStatusResponse =
       await patchRefundStatus(allOrders);
     for (const order of allOrders) {
-      const refundStatus = refundResponse.refundSummaryList.find(
+      const refundStatus = refundResponse?.refundSummaryList?.find(
         (refund) => refund.OrderId === order.orderId
       );
       if (refundStatus) {
@@ -655,7 +686,6 @@ const ReviewTable = (props: {
       }
     }
     handleInpageFilterChange(inPageFilters, allOrders);
-    console.log(allOrders, "allOrders");
     setReviewLoading(false);
   };
   const handleTableChange = (
@@ -695,24 +725,18 @@ const ReviewTable = (props: {
     orders: DataType[] = reviewData
   ) => {
     setInpageFilters(filters);
-    const filteredData: DataType[] = [];
+    let filteredData: DataType[] = [];
     orders.forEach((record) => {
       record.enabled = true;
-      console.log(filters, "filters.rating");
       if (filters.rating.length > 0) {
-        console.log("1st step", filters.rating.sort());
         filters.rating
           .sort((a, b) => +b - +a)
           .forEach((rat) => {
-            console.log("2st step", rat);
             if (
               record.products.some((product) => {
-                console.log(+product.productDetails.rating, +rat);
-                return +product.productDetails.rating >= +rat;
+                return +product.reviewDetails.rating >= +rat;
               })
             ) {
-              console.log("3st step", rat);
-
               record.enabled = true;
             } else {
               record.enabled = false;
@@ -745,9 +769,42 @@ const ReviewTable = (props: {
       ) {
         record.enabled = true;
       }
+
       filteredData.push(record);
     });
-    console.log(reviewData, "reviewData");
+
+    //sort
+    if (filters.sortBy.length > 0) {
+      if (filters.sortBy[0] === "rating-asc") {
+        filteredData = filteredData.sort((a, b) =>
+          +a.products[0].reviewDetails.rating >
+          +b.products[0].reviewDetails.rating
+            ? 1
+            : -1
+        );
+      } else if (filters.sortBy[0] === "rating-desc") {
+        filteredData = filteredData.sort((a, b) =>
+          +a.products[0].reviewDetails.rating <
+          +b.products[0].reviewDetails.rating
+            ? 1
+            : -1
+        );
+      } else if (filters.sortBy[0] === "reviews-asc") {
+        filteredData = filteredData.sort((a, b) =>
+          +a.products[0].reviewDetails.total_review_formatted >
+          +b.products[0].reviewDetails.total_review_formatted
+            ? 1
+            : -1
+        );
+      } else if (filters.sortBy[0] === "reviews-desc") {
+        filteredData = filteredData.sort((a, b) =>
+          +a.products[0].reviewDetails.total_review_formatted <
+          +b.products[0].reviewDetails.total_review_formatted
+            ? 1
+            : -1
+        );
+      }
+    }
     setReviewData(orders);
     setFilteredData(filteredData.filter((record) => record.enabled));
   };

@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosPromise, AxiosRequestConfig, AxiosResponse } from "axios";
 import { setTimed } from "../../helpers/Cache";
 import moment from "moment";
 
@@ -75,3 +75,38 @@ export const requestReview = async (
     }
   });
 };
+
+// Function to process tasks in batches
+export async function processInBatches(
+  tasks: { asin: string; api: any }[],
+  batchSize: number
+) {
+  // console.log(tasks, "tasks");
+  let allData: any[] = [];
+  // Split tasks into batches
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+
+    // Execute all tasks in the batch and wait for them to complete
+    const data = await Promise.all(
+      batch.map(async (task) => {
+        const data = await task.api();
+        {
+          return { api: data, asin: task.asin, data: data };
+        }
+      })
+    );
+    allData = [...allData, ...data];
+    // console.log(data, "fafasf");
+    // return data;
+    // console.log(`Batch ${Math.floor(i / batchSize) + 1} completed`);
+  }
+  return allData;
+
+  // console.log("All batches completed");
+}
+
+// Usage
+// processInBatches(tasks, 2)
+//   .then(() => console.log("All tasks completed"))
+//   .catch((err) => console.error("An error occurred:", err));
