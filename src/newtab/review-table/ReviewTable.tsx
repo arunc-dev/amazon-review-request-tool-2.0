@@ -345,8 +345,8 @@ const ReviewTable = (props: {
           <span
             className={
               text === "PaymentComplete"
-                ? `px-4 py-2 bg-[#E3FCEE] text-[#09B253] rounded-lg`
-                : `px-4 py-2 bg-[#faefd7] text-[#f19822] rounded-lg`
+                ? `px-4 py-2 bg-[#E3FCEE] text-[#09B253] rounded-lg max-w-max	block`
+                : `px-4 py-2 bg-[#faefd7] text-[#f19822] rounded-lg max-w-max	block`
             }
           >
             {startCase(text)}

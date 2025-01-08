@@ -40,7 +40,7 @@ const QuotaContainer = ({ quota }: { quota: QuotaModel }) => {
 };
 
 export default function ReviewRequestContainer(props: Props) {
-  const [geoDetails, setGeoDetails] = useState<GeoMapsModel>(geoMaps.AMAZON_US);
+  const [geoDetails, setGeoDetails] = useState<GeoMapsModel>();
   const userContext = useContext(UserContext);
   const [signInStateLoading, setSignInStateLoading] = useState(false);
   if (!userContext) {
@@ -145,17 +145,17 @@ export default function ReviewRequestContainer(props: Props) {
   return (
     <Layout className="p-4 bg-white mb-10" style={{ padding: "0 48px" }}>
       <header className="my-4">
-        <div className="flex justify-between items-center">
-          <div className="flex justify-center items-center space-x-3">
+        <div className="flex justify-between items-center flex-wrap">
+          <div className="flex justify-center items-center space-x-3 p-3">
             <img src="./img/logo.png" alt="logo" width="30px" />
             <span className="font-medium text-lg">
               Amazon Review Request Tool
             </span>
           </div>
           {signInStateLoading ? (
-            ""
+            "Loading..."
           ) : (
-            <div className="flex flex-row space-x-4 items-center">
+            <div className="flex flex-row space-x-4 items-center  justify-end">
               <Tooltip
                 title={
                   userDetails.quota.limit > 1000
@@ -197,17 +197,19 @@ export default function ReviewRequestContainer(props: Props) {
                   </Tooltip>
                 </div>
               ) : (
-                <Button
-                  type="primary"
-                  onClick={() =>
-                    window.open(
-                      "https://dashboard.sellerapp.com/login?source=extension",
-                      "_self"
-                    )
-                  }
-                >
-                  Login
-                </Button>
+                <>
+                  <Button
+                    type="primary"
+                    onClick={() =>
+                      window.open(
+                        "https://dashboard.sellerapp.com/login?source=extension",
+                        "_self"
+                      )
+                    }
+                  >
+                    Login
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -215,49 +217,53 @@ export default function ReviewRequestContainer(props: Props) {
       </header>
       <Content>
         <ReviewInfoBanner />
-        {isLoggedIn ? (
-          <ReviewTable
-            isSignedIn={handleSignIn}
-            amazonEndpoint={`https://${geoDetails.baseDomain}`}
-            refreshPage={refreshPage}
-            isQuotaExhausted={(value: boolean) => props.onQuotaExhausted(value)}
-          ></ReviewTable>
-        ) : (
-          <div className="text-center min-h-80 flex justify-center items-center flex-col space-y-4 p-16">
-            <img src="./img/sellercentral-not-available.png" />
-            <h4 className="text-2xl font-medium">
-              Unable to access Amazon Seller Central Account.
-            </h4>
-            <h4 className="text-base">
-              Please login to your Amazon Seller Central Account & choose the
-              marketplace <br />
-              of your choice. Refresh to see the updated content.
-            </h4>
-            <div className="space-x-4">
-              <Button
-                onClick={() =>
-                  (window as any).open(
-                    `https://${geoDetails.baseDomain}`,
-                    "_blank"
-                  )
-                }
-              >
-                Open Seller Central{" "}
-                <span className="material-symbols-outlined">open_in_new</span>
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  setRefreshPage(true);
-                  setIsLoggedIn(true);
-                }}
-              >
-                Refresh
-                <span className="material-symbols-outlined">refresh</span>
-              </Button>
+        {geoDetails ? (
+          isLoggedIn ? (
+            <ReviewTable
+              isSignedIn={handleSignIn}
+              amazonEndpoint={`https://${geoDetails.baseDomain}`}
+              refreshPage={refreshPage}
+              isQuotaExhausted={(value: boolean) =>
+                props.onQuotaExhausted(value)
+              }
+            ></ReviewTable>
+          ) : (
+            <div className="text-center min-h-80 flex justify-center items-center flex-col space-y-4 p-16">
+              <img src="./img/sellercentral-not-available.png" />
+              <h4 className="text-2xl font-medium">
+                Unable to access Amazon Seller Central Account.
+              </h4>
+              <h4 className="text-base">
+                Please login to your Amazon Seller Central Account & choose the
+                marketplace <br />
+                of your choice. Refresh to see the updated content.
+              </h4>
+              <div className="space-x-4">
+                <Button
+                  onClick={() =>
+                    (window as any).open(
+                      `https://${geoDetails.baseDomain}`,
+                      "_blank"
+                    )
+                  }
+                >
+                  Open Seller Central{" "}
+                  <span className="material-symbols-outlined">open_in_new</span>
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setRefreshPage(true);
+                    setIsLoggedIn(true);
+                  }}
+                >
+                  Refresh
+                  <span className="material-symbols-outlined">refresh</span>
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        ) : null}
       </Content>
     </Layout>
   );
